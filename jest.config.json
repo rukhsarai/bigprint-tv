@@ -1,14 +1,26 @@
 {
   "preset": "@amazon-devices/react-native-kepler",
   "testRegex": "/test/.*\\.(test|spec)\\.(ts|tsx|js)$",
-  "setupFiles": ["<rootDir>/test/setup.js"],
-  "moduleFileExtensions": ["ts", "tsx", "js", "jsx", "json", "node"],
+  "setupFiles": [
+    "<rootDir>/test/setup.js"
+  ],
+  "moduleFileExtensions": [
+    "ts",
+    "tsx",
+    "js",
+    "jsx",
+    "json",
+    "node"
+  ],
   "moduleNameMapper": {
     "^react-native$": "@amazon-devices/react-native-kepler",
     "^react-native/(.*)$": "@amazon-devices/react-native-kepler/$1",
-    "^~/(.*)$": "<rootDir>/src/$1"
+    "^~/(.*)$": "<rootDir>/src/$1",
+    "^@amazon-devices/react-native-w3cmedia$": "<rootDir>/test/mocks/w3cmedia.js"
   },
-  "modulePaths": ["<rootDir>/src"],
+  "modulePaths": [
+    "<rootDir>/src"
+  ],
   "roots": [
     "<rootDir>/src/",
     "<rootDir>/test/",

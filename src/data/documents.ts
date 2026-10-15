@@ -2,11 +2,20 @@
  * Real documents, produced by running backend/pipeline.py over photographs
  * in the bigprint-tv-dev-ru22 bucket. Regenerate with:
  *
- *     cd backend && python gen_fixtures.py
+ *     cd backend && python gen_fixtures.py ../src/data/documents.ts
  *
  * These are genuine Textract + Nova output, not hand-written examples, so the
  * app is exercised against the messiness of real OCR.
  */
+
+import type {SpeechMark} from './speechMarks';
+
+export type LineSpeech = {
+  /** Polly word timings for this line. */
+  marks: SpeechMark[];
+  /** Roughly how long the audio lasts; drives the silent fallback. */
+  durationMs: number;
+};
 
 export type DocumentFact = {
   label: string;
@@ -31,6 +40,10 @@ export type ScannedDocument = {
   lines: string[];
   /** True when OCR confidence was low, so the UI warns instead of pretending. */
   lowConfidence: boolean;
+  /** Unix seconds when the backend produced it. Absent on fixtures. */
+  createdAt?: number;
+  /** One entry per line when the backend made audio. Absent on fixtures. */
+  speech?: LineSpeech[];
 };
 
 /** financial, key facts present. OCR 96.5%, financial=true. */

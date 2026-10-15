@@ -4,9 +4,16 @@ from pipeline import Pipeline, to_app_json
 
 BUCKET = "bigprint-tv-dev-ru22"
 s3 = boto3.client("s3", region_name="us-east-1")
+# Only photographs at the top level: the app's own uploads/, results/ and
+# sessions/ prefixes are skipped, as are formats Textract cannot read.
+READABLE = (".jpg", ".jpeg", ".png")
 keys = []
 for page in s3.get_paginator("list_objects_v2").paginate(Bucket=BUCKET):
-    keys += [o["Key"] for o in page.get("Contents", []) if not o["Key"].startswith("_")]
+    for o in page.get("Contents", []):
+        k = o["Key"]
+        if "/" in k or k.startswith("_") or not k.lower().endswith(READABLE):
+            continue
+        keys.append(k)
 keys.sort()
 
 pipe = Pipeline()
@@ -20,8 +27,9 @@ for k in keys:
         continue
     d = doc.diagnostics
     print(f"   kind={doc.kind!r} sender={doc.sender!r}")
-    print(f"   ocr={d.get('ocrConfidence')}% financial={d.get('isFinancial')} "
-          f"facts={d.get('factsFound')} lowConf={doc.lowConfidence}")
+    print(f"   ocr={d.get('ocrConfidence')}% ({d.get('ocrFeature')}) financial={d.get('isFinancial')} "
+          f"facts={d.get('factsFound')} disputed={len(d.get('factsDisputed') or [])} "
+          f"dropped={d.get('linesDroppedByGuard')} lowConf={doc.lowConfidence}")
     for f in doc.keyFacts:
         print(f"     {f.label:<16} {f.value[:30]:<32} {f.confidence}%")
     for line in doc.lines[:3]:

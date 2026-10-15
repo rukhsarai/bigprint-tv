@@ -14,23 +14,43 @@ import {
 import QRCode from '@amazon-devices/react-native-qrcode-svg';
 
 import {useTextScale} from '../hooks/useTextScale';
-
-/** Where the phone sends the photo. Replace with the real capture URL. */
-const CAPTURE_BASE_URL = 'https://bigprint.tv/scan';
+import type {IncomingStatus} from '../hooks/useIncomingDocument';
+import type {PairingSession} from '../services/documentService';
 
 type Props = {
-  /** Owned by App, so the code stays stable across re-renders. */
-  pairingCode: string;
+  status: IncomingStatus;
+  /** Null until the backend has issued a code. */
+  session: PairingSession | null;
   /** Set when the last attempt failed, so the user is told rather than left waiting. */
   error?: string | null;
 };
 
-export const PairingScreen = ({pairingCode, error}: Props) => {
+/** "482134" -> "482 134": easier to read out and to compare with the phone. */
+export const formatCode = (code: string) =>
+  code.length === 6 ? `${code.slice(0, 3)} ${code.slice(3)}` : code;
+
+const STATUS_TEXT: Record<IncomingStatus, string> = {
+  connecting: 'Getting ready…',
+  waiting: 'Waiting for a photo…',
+  processing: 'Reading your letter. This takes about half a minute.',
+  arrived: '',
+  error: '',
+};
+
+export const PairingScreen = ({status, session, error}: Props) => {
   const {scale, scaled, restored, changeScale, canGoBigger, canGoSmaller} =
     useTextScale();
+  const spokenCode = session ? session.code.split('').join(' ') : '';
 
   return (
-    <View style={styles.screen}>
+    <View
+      style={styles.screen}
+      accessibilityOrientationText={
+        'Pairing screen. Ask someone to point a phone camera at the square ' +
+        'on the right of the screen, then take a photo of a letter. ' +
+        'It will appear here in large print and can be read aloud. ' +
+        'Text size controls are at the bottom left.'
+      }>
       <View style={styles.left}>
         {/* Scrolls so the largest text sizes stay reachable instead of clipping. */}
         <ScrollView
@@ -42,22 +62,21 @@ export const PairingScreen = ({pairingCode, error}: Props) => {
           </Text>
 
           <Text style={[styles.body, {fontSize: scaled(24)}]}>
-            1. Scan this code with your phone camera
+            1. Point a phone camera at the square on the right
           </Text>
           <Text style={[styles.body, {fontSize: scaled(24)}]}>
-            2. Take a photo of any letter, bill or card
+            2. Tap the link that pops up, then photograph the letter
           </Text>
           <Text style={[styles.body, {fontSize: scaled(24)}]}>
-            3. It appears here in large print
+            3. It appears here in large print, and can be read aloud
           </Text>
-
         </ScrollView>
 
         {/* Controls stay put so they are never scrolled off screen. */}
         <View style={styles.controls}>
           {/* role="alert" so the screen reader speaks it without needing focus,
               which it can never receive. */}
-          {error ? (
+          {status === 'error' && error ? (
             <Text
               role="alert"
               style={[styles.error, {fontSize: scaled(24)}]}
@@ -66,9 +85,10 @@ export const PairingScreen = ({pairingCode, error}: Props) => {
             </Text>
           ) : (
             <Text
+              role={status === 'processing' ? 'alert' : undefined}
               style={[styles.waiting, {fontSize: scaled(24)}]}
-              testID="pairing-waiting">
-              Waiting for your photo…
+              testID={`pairing-${status}`}>
+              {STATUS_TEXT[status]}
             </Text>
           )}
           <TVFocusGuideView style={styles.buttonRow}>
@@ -77,6 +97,7 @@ export const PairingScreen = ({pairingCode, error}: Props) => {
               onPress={() => changeScale(1)}
               disabled={!canGoBigger}
               hasTVPreferredFocus
+              describedBy={['pairing-code-label', 'pairing-code']}
             />
             <SizeButton
               label="Smaller text"
@@ -93,26 +114,29 @@ export const PairingScreen = ({pairingCode, error}: Props) => {
 
       {/* The QR and code never scroll — a user cannot pair without them. */}
       <View style={styles.right}>
-        {/* The QR carries information, so it needs a spoken equivalent:
-            a screen reader user cannot scan it and needs the code instead. */}
+        {/* The QR carries information, so it needs a spoken equivalent. A
+            screen reader user cannot scan it themselves; they need to know
+            what to ask for and what code the helper's phone will show. */}
         <View
           style={styles.qrFrame}
           nativeID="pairing-qr"
           accessible={true}
-          aria-label={`Scan code to send a photo. Or enter code ${pairingCode
-            .split('')
-            .join(' ')} on bigprint.tv`}>
-          <QRCode
-            value={`${CAPTURE_BASE_URL}?code=${pairingCode}`}
-            size={300}
-            ecl="M"
-          />
+          aria-label={
+            session
+              ? `Square code for a phone camera. Ask someone to scan it to send a photo. Their phone will show the code ${spokenCode}.`
+              : 'Square code for a phone camera. Getting ready.'
+          }>
+          {session ? (
+            <QRCode value={session.captureUrl} size={300} ecl="M" />
+          ) : (
+            <View style={styles.qrPlaceholder} testID="qr-placeholder" />
+          )}
         </View>
         <Text nativeID="pairing-code-label" style={styles.codeLabel}>
-          Or enter this code on bigprint.tv
+          {session ? 'The phone will show this code' : ' '}
         </Text>
-        <Text nativeID="pairing-code" style={styles.code}>
-          {pairingCode}
+        <Text nativeID="pairing-code" style={styles.code} testID="pairing-code">
+          {session ? formatCode(session.code) : '--- ---'}
         </Text>
       </View>
     </View>
@@ -124,6 +148,7 @@ type SizeButtonProps = {
   onPress: () => void;
   disabled?: boolean;
   hasTVPreferredFocus?: boolean;
+  describedBy?: string[];
 };
 
 const SizeButton = ({
@@ -131,6 +156,7 @@ const SizeButton = ({
   onPress,
   disabled,
   hasTVPreferredFocus,
+  describedBy,
 }: SizeButtonProps) => {
   const [focused, setFocused] = useState(false);
   return (
@@ -145,11 +171,7 @@ const SizeButton = ({
       aria-label={label}
       aria-disabled={!!disabled}
       // The pairing code can never take focus, so link it to the first control.
-      accessibilityDescribedBy={
-        hasTVPreferredFocus
-          ? ['pairing-code-label', 'pairing-code']
-          : undefined
-      }
+      accessibilityDescribedBy={describedBy}
       testID={`size-button-${label}`}
       style={[
         styles.button,
@@ -213,7 +235,7 @@ const styles = StyleSheet.create({
     color: '#FFD400',
     fontSize: 52,
     fontWeight: '700',
-    letterSpacing: 8,
+    letterSpacing: 6,
     textAlign: 'center',
   },
   buttonRow: {
@@ -268,5 +290,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     padding: 24,
     borderRadius: 12,
+  },
+  qrPlaceholder: {
+    width: 300,
+    height: 300,
+    backgroundColor: '#EEEEEE',
   },
 });

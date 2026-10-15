@@ -1,37 +1,52 @@
-import React, {useMemo, useState} from 'react';
+import React, {useMemo} from 'react';
 
 import {PairingScreen} from './screens/PairingScreen';
 import {DocumentView} from './screens/DocumentView';
 import {useIncomingDocument} from './hooks/useIncomingDocument';
 import {
   createMockDocumentService,
+  createRemoteDocumentService,
   type DocumentService,
 } from './services/documentService';
-
-const makePairingCode = (): string =>
-  String(Math.floor(1000 + Math.random() * 9000));
+import type {AudioPlayer} from './services/audioPlayer';
+import {createVegaAudioPlayer} from './services/vegaAudio';
+import {CAPTURE_BASE_URL} from './config';
 
 type Props = {
-  /** Injected in tests, and swapped for the real API client later. */
+  /** Injected in tests. Defaults to the real backend, or the mock when no URL is configured. */
   service?: DocumentService;
+  /** Injected in tests. Defaults to the platform audio player; null means silent highlighting. */
+  player?: AudioPlayer | null;
 };
 
-export const App = ({service}: Props) => {
-  const [pairingCode] = useState<string>(makePairingCode);
+export const App = ({service, player}: Props) => {
   // Built once: a new service object each render would resubscribe endlessly.
   const documentService = useMemo(
-    () => service ?? createMockDocumentService(),
+    () =>
+      service ??
+      (CAPTURE_BASE_URL
+        ? createRemoteDocumentService(CAPTURE_BASE_URL)
+        : createMockDocumentService()),
     [service],
   );
-
-  const {status, document, error, reset} = useIncomingDocument(
-    documentService,
-    pairingCode,
+  const audioPlayer = useMemo(
+    () => (player === undefined ? createVegaAudioPlayer() : player),
+    [player],
   );
 
+  const {status, session, document, error, reset} =
+    useIncomingDocument(documentService);
+
   if (status === 'arrived' && document) {
-    return <DocumentView document={document} onBack={reset} />;
+    return (
+      <DocumentView
+        document={document}
+        player={audioPlayer}
+        audioUrl={(lineIndex) => documentService.audioUrl(document, lineIndex)}
+        onBack={reset}
+      />
+    );
   }
 
-  return <PairingScreen pairingCode={pairingCode} error={error} />;
+  return <PairingScreen status={status} session={session} error={error} />;
 };

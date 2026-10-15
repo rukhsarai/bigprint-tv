@@ -14,16 +14,27 @@ import {useTextScale} from '../hooks/useTextScale';
 import {useReadAloud} from '../hooks/useReadAloud';
 import type {SpeechMark} from '../data/speechMarks';
 import type {ScannedDocument} from '../data/documents';
+import type {AudioPlayer} from '../services/audioPlayer';
 
 type Props = {
   document: ScannedDocument;
+  /** Null when the platform has no audio: lines are then highlighted silently. */
+  player: AudioPlayer | null;
+  /** Where a line's audio lives, or null when there is none. */
+  audioUrl: (lineIndex: number) => string | null;
   onBack: () => void;
 };
 
-export const DocumentView = ({document, onBack}: Props) => {
+export const DocumentView = ({document, player, audioUrl, onBack}: Props) => {
   const {scale, scaled, changeScale, canGoBigger, canGoSmaller} =
     useTextScale();
-  const {readingLine, wordIndex, marks, toggle, stop} = useReadAloud();
+  const {readingLine, wordIndex, marks, toggle, stop} = useReadAloud(player);
+
+  const readLine = (index: number, line: string) =>
+    toggle(index, line, {
+      marks: document.speech?.[index]?.marks,
+      audioUrl: audioUrl(index),
+    });
 
   const handleBack = () => {
     stop();
@@ -96,7 +107,7 @@ export const DocumentView = ({document, onBack}: Props) => {
               isSpoken={readingLine === index}
               marks={readingLine === index ? marks : []}
               wordIndex={readingLine === index ? wordIndex : -1}
-              onPress={() => toggle(index, line)}
+              onPress={() => readLine(index, line)}
               hasTVPreferredFocus={index === 0}
               describedBy={index === 0 ? describedByIds : undefined}
               testID={`line-${index}`}

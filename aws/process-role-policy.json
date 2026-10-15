@@ -1,0 +1,50 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ReadPhotos",
+      "Effect": "Allow",
+      "Action": "s3:GetObject",
+      "Resource": "arn:aws:s3:::bigprint-tv-dev-ru22/uploads/*"
+    },
+    {
+      "Sid": "WriteResults",
+      "Effect": "Allow",
+      "Action": "s3:PutObject",
+      "Resource": "arn:aws:s3:::bigprint-tv-dev-ru22/results/*"
+    },
+    {
+      "Sid": "DailyCapCounter",
+      "Effect": "Allow",
+      "Action": ["s3:GetObject", "s3:PutObject"],
+      "Resource": "arn:aws:s3:::bigprint-tv-dev-ru22/counters/*"
+    },
+    {
+      "Sid": "ReadDocuments",
+      "Effect": "Allow",
+      "Action": ["textract:DetectDocumentText", "textract:AnalyzeDocument", "textract:AnalyzeExpense"],
+      "Resource": "*"
+    },
+    {
+      "Sid": "NovaOnly",
+      "Effect": "Allow",
+      "Action": "bedrock:InvokeModel",
+      "Resource": [
+        "arn:aws:bedrock:*::foundation-model/amazon.nova-*",
+        "arn:aws:bedrock:*:*:inference-profile/*amazon.nova-*"
+      ]
+    },
+    {
+      "Sid": "Speech",
+      "Effect": "Allow",
+      "Action": "polly:SynthesizeSpeech",
+      "Resource": "*"
+    },
+    {
+      "Sid": "OwnLogs",
+      "Effect": "Allow",
+      "Action": ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"],
+      "Resource": "arn:aws:logs:us-east-1:236605144361:log-group:/aws/lambda/bigprint-tv-process*"
+    }
+  ]
+}
