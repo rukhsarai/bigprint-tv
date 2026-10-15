@@ -25,7 +25,7 @@ before changing anything.
 | [CONTEXT.md](CONTEXT.md) | **Full project context — read first** |
 | [backend/README.md](backend/README.md) | The AWS backend: architecture, trust model, cost, deploy |
 | [AWS_SETUP.md](AWS_SETUP.md) | AWS account and IAM setup, step by step |
-| [DAILY_GUIDE.md](DAILY_GUIDE.md) | Commands to start work each day ([PDF](BigPrint_TV_Daily_Guide.pdf)) |
+| [DAILY_GUIDE.md](DAILY_GUIDE.md) | Commands to start work each day ([PDF](BigPrint_TV_Daily_Guide.pdf), app part only) |
 | [FRICTION_LOG.md](FRICTION_LOG.md) | Developer-experience issues found while building on Vega |
 
 ## How it works

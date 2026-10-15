@@ -8,7 +8,8 @@
  * Leave it empty to run the app against the built-in mock, which delivers a
  * sample document after a few seconds and makes no network calls.
  */
-export const CAPTURE_BASE_URL = '';
+export const CAPTURE_BASE_URL =
+  'https://jd2dhu5djhksxxxsse7bm3hxue0hyrlq.lambda-url.us-east-1.on.aws';
 
 /** How often the TV asks whether a photo has been read, in milliseconds. */
 export const POLL_INTERVAL_MS = 3000;

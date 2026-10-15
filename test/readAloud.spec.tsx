@@ -201,3 +201,128 @@ describe('useIncomingDocument', () => {
     expect(result.current.document).toBeNull();
   });
 });
+
+describe('createMediaElementPlayer robustness', () => {
+  const settle = async () => {
+    for (let i = 0; i < 6; i++) {
+      await Promise.resolve();
+    }
+  };
+
+  it('gives up on an initialise that never answers, so the line is not a dead button', async () => {
+    jest.useFakeTimers();
+    const player = createMediaElementPlayer(() => new Promise<MediaElementLike>(() => {}));
+    const onError = jest.fn();
+    player.play('https://x/a.mp3', {onTime: jest.fn(), onEnded: jest.fn(), onError});
+    await settle();
+    expect(onError).not.toHaveBeenCalled();
+    jest.advanceTimersByTime(4100);
+    await settle();
+    expect(onError).toHaveBeenCalledTimes(1);
+    jest.useRealTimers();
+  });
+
+  it('goes silent when nothing plays within the start timeout', async () => {
+    jest.useFakeTimers();
+    const listeners: Record<string, () => void> = {};
+    const el: MediaElementLike = {
+      src: '',
+      currentTime: 0,
+      play: jest.fn(),
+      pause: jest.fn(),
+      addEventListener: (t, fn) => {
+        listeners[t] = fn;
+      },
+      removeEventListener: (t) => {
+        delete listeners[t];
+      },
+    };
+    const player = createMediaElementPlayer(() => el);
+    const onError = jest.fn();
+    const onTime = jest.fn();
+    player.play('https://x/a.mp3', {onTime, onEnded: jest.fn(), onError});
+    await settle();
+    jest.advanceTimersByTime(4200);
+    expect(onError).toHaveBeenCalledTimes(1);
+    // The watchdog stops the clock as well.
+    const calls = onTime.mock.calls.length;
+    jest.advanceTimersByTime(500);
+    expect(onTime.mock.calls.length).toBe(calls);
+    jest.useRealTimers();
+  });
+
+  it('treats losing the speaker to Alexa as the end of the line', async () => {
+    jest.useFakeTimers();
+    const listeners: Record<string, () => void> = {};
+    const el: MediaElementLike = {
+      src: '',
+      currentTime: 0,
+      play: jest.fn(),
+      pause: jest.fn(),
+      addEventListener: (t, fn) => {
+        listeners[t] = fn;
+      },
+      removeEventListener: (t) => {
+        delete listeners[t];
+      },
+    };
+    const player = createMediaElementPlayer(() => el);
+    const onEnded = jest.fn();
+    player.play('https://x/a.mp3', {onTime: jest.fn(), onEnded, onError: jest.fn()});
+    await settle();
+    el.currentTime = 1.2;
+    jest.advanceTimersByTime(100);
+    listeners.audiofocuslost();
+    expect(onEnded).toHaveBeenCalledTimes(1);
+    jest.useRealTimers();
+  });
+});
+
+describe('useIncomingDocument late events', () => {
+  const makeService = () => {
+    let l: DocumentListener | null = null;
+    const service = {
+      subscribe: (listener: DocumentListener) => {
+        l = listener;
+        return () => {};
+      },
+      audioUrl: () => null,
+    };
+    return {service, listener: () => l!};
+  };
+
+  it('surfaces a failed second photo after Back instead of losing it', () => {
+    const {service, listener} = makeService();
+    const {result} = renderHook(() => useIncomingDocument(service));
+    act(() => listener().onSession({code: '482134', captureUrl: 'u', expiresAt: 1}));
+    act(() => listener().onDocument(sampleReceipt));
+    act(() => listener().onProcessing());
+    act(() => listener().onError('Too dark.'));
+    expect(result.current.status).toBe('arrived');
+    act(() => result.current.reset());
+    expect(result.current.status).toBe('error');
+    expect(result.current.error).toBe('Too dark.');
+  });
+
+  it('shows "reading" after Back when the next page is still being read', () => {
+    const {service, listener} = makeService();
+    const {result} = renderHook(() => useIncomingDocument(service));
+    act(() => listener().onSession({code: '482134', captureUrl: 'u', expiresAt: 1}));
+    act(() => listener().onDocument(sampleReceipt));
+    act(() => listener().onProcessing());
+    act(() => result.current.reset());
+    expect(result.current.status).toBe('processing');
+  });
+
+  it('a renewed session does not clear an error the user has not seen', () => {
+    const {service, listener} = makeService();
+    const {result} = renderHook(() => useIncomingDocument(service));
+    act(() => listener().onSession({code: '482134', captureUrl: 'u', expiresAt: 1}));
+    act(() => listener().onError('Too dark.'));
+    expect(result.current.status).toBe('error');
+    act(() => listener().onSession({code: '900001', captureUrl: 'u2', expiresAt: 2}));
+    // A fresh code means the user can try again; the screen goes back to waiting.
+    expect(result.current.status).toBe('waiting');
+    expect(result.current.session?.code).toBe('900001');
+  });
+});

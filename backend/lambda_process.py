@@ -11,7 +11,8 @@ capture function can hand it to the TV:
 
 This function has no public endpoint. Its only input is a photo that the
 capture function already accepted, and a daily cap stops a flood of uploads
-from running up the bill.
+from running up the bill. The cap is spent only once a photo has actually
+been read, so garbage uploads cannot use up real readers' budget.
 """
 
 from __future__ import annotations
@@ -31,7 +32,7 @@ from pipeline import Pipeline, to_app_json
 from speech import Speech
 
 BUCKET = os.environ["BUCKET"]
-DAILY_CAP = int(os.environ.get("DAILY_CAP", "500"))
+DAILY_CAP = int(os.environ.get("DAILY_CAP", "200"))
 REWRITE_WITH_IMAGE = os.environ.get("REWRITE_WITH_IMAGE", "0") == "1"
 
 s3 = boto3.client("s3")
@@ -44,34 +45,66 @@ FRIENDLY_ERROR = "We could not read that photo. Please try again in better light
 CAP_ERROR = "The service is very busy today. Please try again tomorrow."
 
 
-def _put_json(key: str, data: dict):
+def _put_json(key: str, data: dict, **conditions):
     s3.put_object(Bucket=BUCKET, Key=key, Body=json.dumps(data).encode("utf-8"),
-                  ContentType="application/json")
+                  ContentType="application/json", **conditions)
+
+
+def _get_json(key: str):
+    """(data, etag) or (None, None)."""
+    try:
+        obj = s3.get_object(Bucket=BUCKET, Key=key)
+    except ClientError as e:
+        if e.response["Error"]["Code"] in ("NoSuchKey", "404"):
+            return None, None
+        raise
+    return json.loads(obj["Body"].read()), obj.get("ETag")
 
 
 def _status(sid: str, state: str, **extra):
     _put_json(f"results/{sid}/status.json", {"state": state, "at": int(time.time()), **extra})
 
 
-def _under_daily_cap() -> bool:
-    """Soft global cap. A race can let a couple of extra documents through,
-    which is fine — this protects the bill, not a quota."""
-    key = f"counters/{dt.date.today().isoformat()}.json"
-    try:
-        count = json.loads(s3.get_object(Bucket=BUCKET, Key=key)["Body"].read()).get("count", 0)
-    except ClientError as e:
-        if e.response["Error"]["Code"] not in ("NoSuchKey", "404"):
-            raise
-        count = 0
-    if count >= DAILY_CAP:
-        return False
-    _put_json(key, {"count": count + 1})
-    return True
+def _counter_key() -> str:
+    return f"counters/{dt.date.today().isoformat()}.json"
+
+
+def _cap_reached() -> bool:
+    data, _ = _get_json(_counter_key())
+    return (data or {}).get("count", 0) >= DAILY_CAP
+
+
+def _spend_cap():
+    """Count one real document. A conditional write keeps parallel runs honest;
+    if the object changed underneath us we re-read and try again."""
+    key = _counter_key()
+    for _ in range(4):
+        data, etag = _get_json(key)
+        count = (data or {}).get("count", 0) + 1
+        try:
+            if etag:
+                _put_json(key, {"count": count}, IfMatch=etag)
+            else:
+                _put_json(key, {"count": count}, IfNoneMatch="*")
+            return
+        except ClientError as e:
+            if e.response["Error"]["Code"] not in ("PreconditionFailed", "412", "ConditionalRequestConflict"):
+                raise
+    # Four collisions in a row: count it unconditionally rather than lose it.
+    data, _ = _get_json(key)
+    _put_json(key, {"count": (data or {}).get("count", 0) + 1})
 
 
 def process(sid: str, upload_id: str, key: str):
     global _pipeline, _speech
-    if not _under_daily_cap():
+
+    # Lambda retries an async invocation on failure or timeout; never pay twice.
+    status, _ = _get_json(f"results/{sid}/status.json")
+    if status and status.get("uploadId") == upload_id and status.get("state") in ("done", "error"):
+        print(f"already handled {upload_id}, skipping")
+        return
+
+    if _cap_reached():
         print(f"daily cap reached, refusing {key}")
         _status(sid, "error", uploadId=upload_id, message=CAP_ERROR)
         return
@@ -83,19 +116,32 @@ def process(sid: str, upload_id: str, key: str):
     doc_id = f"doc-{int(time.time())}-{uuid.uuid4().hex[:12]}"
     started = time.time()
 
-    doc = _pipeline.run(image_bytes=image, doc_id=doc_id)
+    # OCR first: a blank or bogus upload costs a fraction of a cent and does
+    # not spend the daily budget.
+    ocr = _pipeline.read_text({"Bytes": image})
+    if not ocr.texts:
+        _status(sid, "error", uploadId=upload_id, message=FRIENDLY_ERROR)
+        return
+    _spend_cap()
+
+    doc = _pipeline.run(image_bytes=image, doc_id=doc_id, ocr=ocr)
     if not doc.lines:
         _status(sid, "error", uploadId=upload_id, message=FRIENDLY_ERROR)
         return
 
     audio = _speech.lines(doc.lines)
+    speech = []
     for n, a in enumerate(audio):
+        if a is None:
+            speech.append(None)
+            continue
         s3.put_object(Bucket=BUCKET, Key=f"results/{sid}/{doc_id}/line-{n}.mp3",
                       Body=a.mp3, ContentType="audio/mpeg")
+        speech.append({"marks": a.marks, "durationMs": a.durationMs})
 
     payload = to_app_json(doc)
     payload["createdAt"] = int(time.time())
-    payload["speech"] = [{"marks": a.marks, "durationMs": a.durationMs} for a in audio]
+    payload["speech"] = speech
     _put_json(f"results/{sid}/{doc_id}.json", payload)
     _status(sid, "done", uploadId=upload_id, docId=doc_id)
 
@@ -103,9 +149,9 @@ def process(sid: str, upload_id: str, key: str):
     print(json.dumps({
         "event": "processed", "docId": doc_id, "seconds": round(time.time() - started, 1),
         "ocrConfidence": d.get("ocrConfidence"), "ocrFeature": d.get("ocrFeature"),
-        "lines": len(doc.lines), "facts": d.get("factsFound"),
-        "disputed": len(d.get("factsDisputed") or []), "dropped": d.get("linesDroppedByGuard"),
-        "lowConfidence": doc.lowConfidence,
+        "lines": len(doc.lines), "silentLines": sum(1 for s in speech if s is None),
+        "facts": d.get("factsFound"), "disputed": len(d.get("factsDisputed") or []),
+        "dropped": d.get("linesDroppedByGuard"), "lowConfidence": doc.lowConfidence,
     }))
 
 

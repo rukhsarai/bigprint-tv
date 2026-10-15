@@ -123,3 +123,34 @@ google-chrome --new-window "http://localhost:8081$(curl -s http://localhost:8081
    That's why this folder is `vega-os-and-fire-tv-env` and not `vega os and fire tv env`.
 2. **Your `console.log` does not show in Metro anymore.** It only shows in the
    debugger (step 7). This is normal for React Native 0.83.
+
+---
+
+## The backend (only when you change `backend/` or `aws/`)
+
+Backend code runs on AWS, not on the TV, so it has its own commands. One-off
+setup is in `AWS_SETUP.md`.
+
+**Run the backend tests** (no AWS needed)
+```bash
+npm run test:backend
+```
+
+**Deploy or update the backend** (about a minute)
+```bash
+cd backend && . .venv/bin/activate && python ../aws/deploy.py
+```
+It prints the capture URL. If it changed, paste it into `src/config.ts`.
+
+**Check what is deployed**
+```bash
+python aws/deploy.py --status
+```
+
+**Run the accuracy report over every photo in the bucket** (costs about 8p a photo)
+```bash
+cd backend && python run_batch.py results.json
+```
+
+**Watch the processing function's log** when a photo "never arrives" on the TV:
+CloudWatch → Log groups → `/aws/lambda/bigprint-tv-process`.

@@ -162,3 +162,59 @@ describe('createRemoteDocumentService', () => {
     expect(impl).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('createRemoteDocumentService timeouts and renewal', () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+  });
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  const session = {ok: true, code: '482134', secret: 'abcdefghijklmnopqrstuv', expiresAt: 9999999999};
+
+  it('reports an error when a reading never finishes', async () => {
+    const answers = [{body: session}];
+    for (let i = 0; i < 60; i++) {
+      answers.push({body: {ok: true, state: 'processing'} as unknown as typeof session});
+    }
+    const {impl} = makeFetch(answers);
+    const l = listener();
+    const unsubscribe = createRemoteDocumentService('https://x.test', impl, 1000).subscribe(l);
+    await flush();
+    const start = Date.now();
+    jest.setSystemTime(start);
+    for (let i = 0; i < 55; i++) {
+      jest.setSystemTime(start + (i + 1) * 3000);
+      jest.advanceTimersByTime(1000);
+      await flush();
+      await flush();
+    }
+    expect(l.onProcessing).toHaveBeenCalledTimes(1);
+    expect(l.onError).toHaveBeenCalledTimes(1);
+    expect(l.onError).toHaveBeenCalledWith('That took too long. Please take the photo again.');
+    unsubscribe();
+  });
+
+  it('keeps audio working for a document after the session is renewed', async () => {
+    const doc = {...sampleReceipt, id: 'doc-1700000000-abcdefabcdef', speech: [{marks: [], durationMs: 0}]};
+    const {impl} = makeFetch([
+      {body: session},
+      {body: {ok: true, state: 'done', document: doc}},
+      {status: 410, body: {ok: false}},
+      {body: {...session, code: '900001', secret: 'zzzzzzzzzzzzzzzzzzzzzz'}},
+    ]);
+    const service = createRemoteDocumentService('https://x.test', impl, 1000);
+    const l = listener();
+    const unsubscribe = service.subscribe(l);
+    await flush();
+    for (let i = 0; i < 3; i++) {
+      jest.advanceTimersByTime(1000);
+      await flush();
+      await flush();
+    }
+    expect(l.onSession).toHaveBeenLastCalledWith(expect.objectContaining({code: '900001'}));
+    expect(service.audioUrl(doc, 0)).toContain('c=482134&k=abcdefghijklmnopqrstuv');
+    unsubscribe();
+  });
+});

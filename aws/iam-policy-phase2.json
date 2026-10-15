@@ -2,7 +2,7 @@
   "Version": "2012-10-17",
   "Statement": [
     {
-      "Sid": "ManageOnlyTheCaptureFunction",
+      "Sid": "ManageBigPrintFunctions",
       "Effect": "Allow",
       "Action": [
         "lambda:CreateFunction",
@@ -18,29 +18,62 @@
         "lambda:CreateFunctionUrlConfig",
         "lambda:UpdateFunctionUrlConfig",
         "lambda:GetFunctionUrlConfig",
-        "lambda:DeleteFunctionUrlConfig"
+        "lambda:DeleteFunctionUrlConfig",
+        "lambda:PutFunctionConcurrency",
+        "lambda:PutFunctionEventInvokeConfig",
+        "lambda:GetFunctionEventInvokeConfig"
       ],
-      "Resource": "arn:aws:lambda:us-east-1:236605144361:function:bigprint-tv-capture"
+      "Resource": "arn:aws:lambda:us-east-1:236605144361:function:bigprint-tv-*"
     },
     {
-      "Sid": "PassOnlyTheOneRoleYouCreated",
+      "Sid": "PassOnlyBigPrintRoles",
       "Effect": "Allow",
       "Action": "iam:PassRole",
-      "Resource": "arn:aws:iam::236605144361:role/BigPrintTvCaptureRole",
+      "Resource": [
+        "arn:aws:iam::236605144361:role/BigPrintTvCaptureRole",
+        "arn:aws:iam::236605144361:role/BigPrintTvProcessRole"
+      ],
       "Condition": {
-        "StringEquals": {"iam:PassedToService": "lambda.amazonaws.com"}
+        "StringEquals": {
+          "iam:PassedToService": "lambda.amazonaws.com"
+        }
       }
     },
     {
-      "Sid": "ReadLambdaLogsForDebugging",
+      "Sid": "CheckBigPrintRoles",
       "Effect": "Allow",
       "Action": [
-        "logs:DescribeLogGroups",
+        "iam:GetRole",
+        "iam:ListRolePolicies",
+        "iam:GetRolePolicy"
+      ],
+      "Resource": [
+        "arn:aws:iam::236605144361:role/BigPrintTvCaptureRole",
+        "arn:aws:iam::236605144361:role/BigPrintTvProcessRole"
+      ]
+    },
+    {
+      "Sid": "ConfigureTheBucket",
+      "Effect": "Allow",
+      "Action": [
+        "s3:PutBucketNotification",
+        "s3:GetBucketNotification",
+        "s3:PutLifecycleConfiguration",
+        "s3:GetLifecycleConfiguration",
+        "s3:PutBucketCORS",
+        "s3:GetBucketCORS"
+      ],
+      "Resource": "arn:aws:s3:::bigprint-tv-dev-ru22"
+    },
+    {
+      "Sid": "ReadFunctionLogs",
+      "Effect": "Allow",
+      "Action": [
         "logs:DescribeLogStreams",
         "logs:GetLogEvents",
         "logs:FilterLogEvents"
       ],
-      "Resource": "arn:aws:logs:us-east-1:236605144361:log-group:/aws/lambda/bigprint-tv-capture*"
+      "Resource": "arn:aws:logs:us-east-1:236605144361:log-group:/aws/lambda/bigprint-tv-*"
     }
   ]
 }

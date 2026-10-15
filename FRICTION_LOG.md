@@ -194,3 +194,36 @@ jest.mock('@react-native-async-storage/async-storage', () =>
 **Suggestion:** Add a one-line "Testing" note to the Vega library page pointing
 at the bundled mock. The `helloWorld` template ships a Jest config, so most
 developers will hit this the first time they add the library.
+
+---
+
+## 7. `AudioPlayer` in `react-native-w3cmedia` is documented only for MSE pre-buffering
+
+**Severity: Low — found while reading the package, not yet confirmed on a device.**
+
+**Task:** Play an MP3 from an HTTPS URL and read `currentTime` to highlight the
+spoken word, using `@amazon-devices/react-native-w3cmedia@2.3.2-rn-83`.
+
+**Steps:** Read the package README and `dist/interface/AudioPlayer.d.ts` and
+`dist/MediaPlayer.d.ts`.
+
+**Expected:** A short example for the common case — set `src` to a URL, call
+`play()`, listen for `ended`.
+
+**Actual:** The README's only `AudioPlayer` example builds a `MediaSource`,
+appends chunks by hand and then calls `play()`. Nothing states whether a plain
+`src = "https://…/line.mp3"` is supported without MSE, whether `initialize()`
+must be awaited before setting `src` (the type comment says "wait for the
+promise to be fulfilled before calling any other function", the README example
+does not wait), or which `AudioContentType` / `AudioUsageType` a speech prompt
+should use. The HTMLMediaElement typing lists custom events
+(`playbackstarted`, `audiofocuslost`) that the README never mentions.
+
+**Workaround:** Wrote a small adapter (`src/services/audioPlayer.ts`) against
+the type definitions, awaiting `initialize()` once and reusing the instance,
+with a silent-highlight fallback if playback errors.
+
+**Suggestion:** Add a ten-line "play a URL" example to the README for both
+`Audio` and `AudioPlayer`, state the `initialize()` requirement next to the
+constructor, and document the custom events and the audio type enums with a
+sentence each on when to use them.

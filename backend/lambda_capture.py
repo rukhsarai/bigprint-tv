@@ -16,7 +16,8 @@ on S3 is keyed by a hash of the two, so the code alone opens nothing.
 
 This function deliberately cannot call Textract, Bedrock or Polly. If the public
 endpoint is abused, the worst outcome is an upload that the processing function
-then refuses under its daily cap.
+then refuses under its daily cap. A per-address limit on sessions and uploads
+stops one machine from using up that cap for everyone.
 """
 
 from __future__ import annotations
@@ -38,6 +39,10 @@ BUCKET = os.environ["BUCKET"]
 SESSION_TTL_SECONDS = int(os.environ.get("SESSION_TTL_SECONDS", str(2 * 60 * 60)))
 MAX_UPLOADS_PER_SESSION = int(os.environ.get("MAX_UPLOADS_PER_SESSION", "20"))
 MAX_UPLOAD_BYTES = int(os.environ.get("MAX_UPLOAD_BYTES", str(4 * 1024 * 1024)))
+# Per source address, per hour. Generous for a care home behind one router,
+# tight enough that one laptop cannot exhaust the daily cap.
+MAX_SESSIONS_PER_IP_HOUR = int(os.environ.get("MAX_SESSIONS_PER_IP_HOUR", "30"))
+MAX_UPLOADS_PER_IP_HOUR = int(os.environ.get("MAX_UPLOADS_PER_IP_HOUR", "60"))
 
 s3 = boto3.client("s3")
 
@@ -55,6 +60,8 @@ SECURITY_HEADERS = {
     "Referrer-Policy": "no-referrer",
     "X-Frame-Options": "DENY",
 }
+
+CONDITIONAL_CODES = ("PreconditionFailed", "412", "ConditionalRequestConflict")
 
 
 # -- helpers ---------------------------------------------------------------
@@ -87,20 +94,58 @@ def _session_id(code: str, secret: str) -> str:
 
 
 def _get_json(key: str):
+    """(data, etag) or (None, None)."""
     try:
         obj = s3.get_object(Bucket=BUCKET, Key=key)
     except ClientError as e:
         if e.response["Error"]["Code"] in ("NoSuchKey", "404"):
-            return None
+            return None, None
         raise
-    return json.loads(obj["Body"].read())
+    return json.loads(obj["Body"].read()), obj.get("ETag")
 
 
-def _put_json(key: str, data: dict):
+def _put_json(key: str, data: dict, **conditions):
     s3.put_object(
         Bucket=BUCKET, Key=key, Body=json.dumps(data).encode("utf-8"),
-        ContentType="application/json",
+        ContentType="application/json", **conditions,
     )
+
+
+def _bump(key: str, field: str, limit: int) -> bool:
+    """Atomically count one more under `field`; False when the limit is reached.
+
+    Read-modify-write with S3 conditional writes, so five parallel requests
+    at 19 of 20 cannot all pass. On persistent collisions the request is
+    refused, which is the safe side.
+    """
+    for _ in range(4):
+        data, etag = _get_json(key)
+        data = data or {}
+        if data.get(field, 0) >= limit:
+            return False
+        data[field] = data.get(field, 0) + 1
+        try:
+            if etag:
+                _put_json(key, data, IfMatch=etag)
+            else:
+                _put_json(key, data, IfNoneMatch="*")
+            return True
+        except ClientError as e:
+            if e.response["Error"]["Code"] not in CONDITIONAL_CODES:
+                raise
+    return False
+
+
+def _source_ip(event) -> str:
+    http = (event.get("requestContext") or {}).get("http") or {}
+    return str(http.get("sourceIp") or "unknown")
+
+
+def _ip_allowed(event, action: str, limit: int) -> bool:
+    """Per-address hourly budget. The address is hashed; nothing identifying is stored."""
+    hour = time.strftime("%Y-%m-%d-%H", time.gmtime())
+    key = f"ratelimit/{_sha(_source_ip(event))[:16]}/{hour}.json"
+    return _bump(key, action, limit)
 
 
 def _load_session(params: dict):
@@ -109,7 +154,7 @@ def _load_session(params: dict):
     secret = params.get("k", "")
     if not CODE_RE.match(code) or not SECRET_RE.match(secret):
         return None, _error(400, "This link is not complete. Please scan the QR code on the TV again.")
-    session = _get_json(f"sessions/{code}.json")
+    session, _ = _get_json(f"sessions/{code}.json")
     if not session:
         return None, _error(404, "This code is not in use. Please scan the QR code on the TV again.")
     if not hmac.compare_digest(session.get("secretHash", ""), _sha(secret)):
@@ -129,11 +174,13 @@ def _body_bytes(event) -> bytes:
 
 # -- routes ----------------------------------------------------------------
 
-def create_session():
+def create_session(event):
     """The TV calls this when it shows the pairing screen."""
+    if not _ip_allowed(event, "sessions", MAX_SESSIONS_PER_IP_HOUR):
+        return _error(429, "Too many requests from this network. Please try again later.")
     for _ in range(5):
         code = f"{secrets.randbelow(1_000_000):06d}"
-        existing = _get_json(f"sessions/{code}.json")
+        existing, _ = _get_json(f"sessions/{code}.json")
         if existing and time.time() < existing.get("expiresAt", 0):
             continue  # live collision, pick another
         break
@@ -171,16 +218,21 @@ def upload(event, params):
     if session is None:
         return sid_or_err
     sid = sid_or_err
-    if session.get("uploads", 0) >= MAX_UPLOADS_PER_SESSION:
-        return _error(429, "That is enough pages for one session. Please scan the QR code on the TV again.")
 
     data = _body_bytes(event)
     if len(data) > MAX_UPLOAD_BYTES:
         return _error(413, "That photo is too large. Please try again.")
     if len(data) < 1024 or not data.startswith(b"\xff\xd8\xff"):
         return _error(415, "Please send a JPEG photo taken with the camera.")
+    if not _ip_allowed(event, "uploads", MAX_UPLOADS_PER_IP_HOUR):
+        return _error(429, "Too many photos from this network. Please try again later.")
+    if not _bump(f"sessions/{session['code']}.json", "uploads", MAX_UPLOADS_PER_SESSION):
+        return _error(429, "That is enough pages for one session. Please scan the QR code on the TV again.")
 
     upload_id = f"{int(time.time())}-{uuid.uuid4().hex[:12]}"
+    _put_json(f"results/{sid}/status.json", {
+        "state": "processing", "uploadId": upload_id, "at": int(time.time()),
+    })
     s3.put_object(
         Bucket=BUCKET,
         Key=f"uploads/{sid}/{upload_id}.jpg",
@@ -188,42 +240,34 @@ def upload(event, params):
         ContentType="image/jpeg",
         Metadata={"code": session["code"]},
     )
-    session["uploads"] = session.get("uploads", 0) + 1
-    _put_json(f"sessions/{session['code']}.json", session)
-    _put_json(f"results/{sid}/status.json", {
-        "state": "processing", "uploadId": upload_id, "at": int(time.time()),
-    })
     return _resp(200, {"ok": True, "uploadId": upload_id})
 
 
 def result(params):
-    """What the TV polls. Returns the processing state and the newest document."""
+    """What the TV polls. Returns the processing state and the newest document.
+
+    One small status object answers most polls; the document itself is read
+    only when it is new to this TV.
+    """
     session, sid_or_err = _load_session(params)
     if session is None:
         return sid_or_err
     sid = sid_or_err
 
-    status = _get_json(f"results/{sid}/status.json") or {"state": "idle"}
+    status, _ = _get_json(f"results/{sid}/status.json")
+    status = status or {"state": "idle"}
     since = params.get("since", "")
 
-    newest_key = None
-    paginator = s3.get_paginator("list_objects_v2")
-    for page in paginator.paginate(Bucket=BUCKET, Prefix=f"results/{sid}/doc-"):
-        for obj in page.get("Contents", []):
-            key = obj["Key"]
-            if key.endswith(".json") and (newest_key is None or key > newest_key):
-                newest_key = key
-
     document = None
-    if newest_key:
-        doc_id = newest_key.rsplit("/", 1)[-1][:-5]
-        if doc_id != since:
-            document = _get_json(newest_key)
+    doc_id = status.get("docId")
+    if status.get("state") == "done" and doc_id and DOC_RE.match(doc_id) and doc_id != since:
+        document, _ = _get_json(f"results/{sid}/{doc_id}.json")
 
     return _resp(200, {
         "ok": True,
         "state": status.get("state", "idle"),
         "message": status.get("message"),
+        "since": status.get("at"),
         "document": document,
         "expiresAt": session.get("expiresAt"),
     })
@@ -260,7 +304,7 @@ def handler(event, _context):
         if method == "GET" and path == "/health":
             return _resp(200, {"ok": True})
         if method == "POST" and path == "/session":
-            return create_session()
+            return create_session(event)
         if method == "GET" and path == "/":
             return serve_page()
         if method == "POST" and path == "/upload":

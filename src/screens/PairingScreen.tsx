@@ -85,7 +85,9 @@ export const PairingScreen = ({status, session, error}: Props) => {
             </Text>
           ) : (
             <Text
-              role={status === 'processing' ? 'alert' : undefined}
+              // Spoken whenever it changes, so a blind user hears "waiting"
+              // (time to ask for a scan) and "reading" without moving focus.
+              aria-live="polite"
               style={[styles.waiting, {fontSize: scaled(24)}]}
               testID={`pairing-${status}`}>
               {STATUS_TEXT[status]}

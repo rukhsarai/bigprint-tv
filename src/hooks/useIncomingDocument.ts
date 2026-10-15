@@ -22,13 +22,20 @@ export type IncomingDocument = {
   reset: () => void;
 };
 
+type Held =
+  | {kind: 'document'; document: ScannedDocument}
+  | {kind: 'processing'}
+  | {kind: 'error'; message: string}
+  | null;
+
 /**
  * Waits for a document to arrive for this TV.
  *
  * The subscription is torn down on unmount, so a late delivery can never push
- * a document onto a screen the user has left. A document that arrives while
- * one is already being read is held back until the reader presses Back, so the
- * page never changes under them.
+ * a document onto a screen the user has left. Anything that happens while a
+ * document is being read — a second page, a failed photo, "reading…" — is
+ * held back and shown when the reader presses Back, so the page never changes
+ * under them and nothing is silently lost.
  */
 export const useIncomingDocument = (
   service: DocumentService,
@@ -38,7 +45,7 @@ export const useIncomingDocument = (
   const [document, setDocument] = useState<ScannedDocument | null>(null);
   const [error, setError] = useState<string | null>(null);
   const reading = useRef(false);
-  const held = useRef<ScannedDocument | null>(null);
+  const held = useRef<Held>(null);
 
   useEffect(() => {
     let active = true;
@@ -49,13 +56,22 @@ export const useIncomingDocument = (
           return;
         }
         setSession(incoming);
-        setError(null);
         if (!reading.current) {
-          setStatus('waiting');
+          setError(null);
+          setStatus((current) =>
+            current === 'connecting' || current === 'error' ? 'waiting' : current,
+          );
         }
       },
       onProcessing: () => {
-        if (!active || reading.current) {
+        if (!active) {
+          return;
+        }
+        if (reading.current) {
+          // A document already held wins over a mere "in progress".
+          if (held.current?.kind !== 'document') {
+            held.current = {kind: 'processing'};
+          }
           return;
         }
         setError(null);
@@ -66,7 +82,7 @@ export const useIncomingDocument = (
           return;
         }
         if (reading.current) {
-          held.current = incoming;
+          held.current = {kind: 'document', document: incoming};
           return;
         }
         reading.current = true;
@@ -75,7 +91,13 @@ export const useIncomingDocument = (
         setStatus('arrived');
       },
       onError: (message) => {
-        if (!active || reading.current) {
+        if (!active) {
+          return;
+        }
+        if (reading.current) {
+          if (held.current?.kind !== 'document') {
+            held.current = {kind: 'error', message};
+          }
           return;
         }
         setError(message);
@@ -91,17 +113,24 @@ export const useIncomingDocument = (
 
   const reset = useCallback(() => {
     reading.current = false;
+    const next = held.current;
+    held.current = null;
     setError(null);
-    if (held.current) {
-      const next = held.current;
-      held.current = null;
+    if (next?.kind === 'document') {
       reading.current = true;
-      setDocument(next);
+      setDocument(next.document);
       setStatus('arrived');
       return;
     }
     setDocument(null);
-    setStatus((current) => (current === 'arrived' ? 'waiting' : current));
+    if (next?.kind === 'processing') {
+      setStatus('processing');
+    } else if (next?.kind === 'error') {
+      setError(next.message);
+      setStatus('error');
+    } else {
+      setStatus((current) => (current === 'arrived' ? 'waiting' : current));
+    }
   }, []);
 
   return {status, session, document, error, reset};

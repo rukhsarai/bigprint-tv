@@ -19,6 +19,14 @@ export type AudioPlayer = {
 export const POSITION_TICK_MS = 50;
 
 /**
+ * How long the platform gets to initialise, or to produce sound, before the
+ * highlight carries on silently. The device is not instant, but it is not
+ * this slow either. Without this a stalled initialise would leave every line
+ * a dead button.
+ */
+export const AUDIO_START_TIMEOUT_MS = 4000;
+
+/**
  * Anything shaped like an HTML media element. Vega's W3C media package
  * provides one (AudioPlayer), and so does a browser.
  */
@@ -31,6 +39,24 @@ export type MediaElementLike = {
   removeEventListener: (type: string, listener: () => void) => void;
   load?: () => void;
 };
+
+const withTimeout = <T,>(work: Promise<T>, ms: number, what: string) =>
+  new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`${what} timed out`)), ms);
+    work.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+
+/** Vega raises these when Alexa or the screen reader takes the speaker. */
+const INTERRUPTIONS = ['audiofocuslost', 'audiofocuspaused'];
 
 /**
  * Wraps a media element. One element is created lazily and reused for every
@@ -72,8 +98,12 @@ export const createMediaElementPlayer = (
       stop();
       const mine = generation;
       if (!element) {
-        element = Promise.resolve().then(getElement);
-        // A failed initialise is not permanent; try again next time.
+        element = withTimeout(
+          Promise.resolve().then(getElement),
+          AUDIO_START_TIMEOUT_MS,
+          'audio initialise',
+        );
+        // A failed or stalled initialise is not permanent; try again next time.
         element.catch(() => {
           element = null;
         });
@@ -93,16 +123,31 @@ export const createMediaElementPlayer = (
           };
           el.addEventListener('ended', onEnded);
           el.addEventListener('error', onError);
+          // An interruption ends the line rather than leaving one word lit.
+          INTERRUPTIONS.forEach((type) => el.addEventListener(type, onEnded));
           detach = () => {
             el.removeEventListener('ended', onEnded);
             el.removeEventListener('error', onError);
+            INTERRUPTIONS.forEach((type) =>
+              el.removeEventListener(type, onEnded),
+            );
           };
           el.src = url;
           if (el.load) {
             el.load();
           }
+          const startedAt = Date.now();
+          let heard = false;
           tick = setInterval(() => {
-            handlers.onTime(Math.round(el.currentTime * 1000));
+            const seconds = el.currentTime;
+            if (seconds > 0) {
+              heard = true;
+            } else if (!heard && Date.now() - startedAt > AUDIO_START_TIMEOUT_MS) {
+              // Nothing has played: wrong URL, codec or focus. Go silent.
+              onError();
+              return;
+            }
+            handlers.onTime(Math.round(seconds * 1000));
           }, POSITION_TICK_MS);
           const result = el.play();
           if (result && typeof (result as Promise<void>).catch === 'function') {

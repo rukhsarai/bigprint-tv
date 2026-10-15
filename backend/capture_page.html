@@ -64,8 +64,9 @@
   $('code').textContent = valid ? code : '----';
   if (!valid) { $('invalid').style.display = 'block'; $('main').style.display = 'none'; return; }
 
-  // Never leave the secret in browser history or the address bar longer than needed.
-  try { history.replaceState(null, '', location.pathname); } catch (e) {}
+  // The secret stays in the address bar on purpose: a reload or a "back" must
+  // still work for a carer mid-way through a letter. The session expires in
+  // two hours and the page sends no referrer.
 
   var MAX_EDGE = 2000;   // pixels; plenty for OCR, keeps uploads under ~1 MB
   var QUALITY = 0.9;

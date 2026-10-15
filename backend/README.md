@@ -32,8 +32,9 @@ TV ◀──GET /audio─────── capture Lambda                      
 - The public function can only write photos and read finished results. The
   processing function has no endpoint at all.
 - Limits: 4 MB and JPEG-only per upload, 20 uploads per session, sessions expire
-  after 2 hours, reserved concurrency 5 (capture) and 3 (process), and a global
-  **500 documents per day** cap. Worst case for a determined abuser is about
+  after 2 hours, reserved concurrency 5 (capture) and 3 (process) where the
+  account allows it (a new account's 10-execution limit cannot be carved up, and
+  then simply acts as the cap), and a global **500 documents per day** cap. Worst case for a determined abuser is about
   $40 of AI calls in a day, and the budget alarm fires long before that.
 - Photos, results, sessions and counters are deleted by an S3 lifecycle rule
   after one day. These are photographs of people's private post.

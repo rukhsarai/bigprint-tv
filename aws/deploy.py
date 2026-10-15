@@ -7,10 +7,10 @@ Deploy or update the BigPrint TV backend. Safe to run repeatedly.
     python ../aws/deploy.py --status   # just show what exists
 
 What it creates, all in us-east-1, all named bigprint-tv-*:
-  - Lambda bigprint-tv-capture  (public Function URL, reserved concurrency 5)
-  - Lambda bigprint-tv-process  (S3-triggered, reserved concurrency 3)
+  - Lambda bigprint-tv-capture  (public Function URL, reserved concurrency 5 where the account allows)
+  - Lambda bigprint-tv-process  (S3-triggered, reserved concurrency 3 where the account allows)
   - S3 notification uploads/*.jpg -> process function
-  - S3 lifecycle: uploads/, results/, sessions/, counters/ deleted after 1 day
+  - S3 lifecycle: uploads/, results/, sessions/, counters/, ratelimit/ deleted after 1 day
 
 It needs the IAM user from AWS_SETUP.md with the BigPrintTvPhase2 policy, and
 the two roles BigPrintTvCaptureRole and BigPrintTvProcessRole with the
@@ -55,7 +55,7 @@ FUNCTIONS = {
         "timeout": 120,
         "memory": 1024,
         "concurrency": 3,
-        "env": {"BUCKET": BUCKET, "DAILY_CAP": "500", "REWRITE_WITH_IMAGE": "0"},
+        "env": {"BUCKET": BUCKET, "DAILY_CAP": "200", "REWRITE_WITH_IMAGE": "0"},
     },
 }
 
@@ -112,7 +112,14 @@ def ensure_function(name: str, spec: dict) -> str:
         wait_updated(name)
         lam.update_function_code(FunctionName=name, ZipFile=code)
     wait_updated(name)
-    lam.put_function_concurrency(FunctionName=name, ReservedConcurrentExecutions=spec["concurrency"])
+    try:
+        lam.put_function_concurrency(FunctionName=name, ReservedConcurrentExecutions=spec["concurrency"])
+    except ClientError as e:
+        # New accounts have a 10-concurrency limit and may not reserve any of it.
+        # The account limit then acts as the cap; the daily cap still protects the bill.
+        if "UnreservedConcurrentExecution" not in str(e):
+            raise
+        print(f"  (could not reserve concurrency for {name}: account limit too low; skipping)")
     return lam.get_function_configuration(FunctionName=name)["FunctionArn"]
 
 
@@ -134,6 +141,14 @@ def ensure_url(name: str) -> str:
     return url
 
 
+def ensure_no_retries(name: str):
+    """A timed-out read must not be re-run twice more at full price."""
+    try:
+        lam.put_function_event_invoke_config(FunctionName=name, MaximumRetryAttempts=0)
+    except ClientError as e:
+        print(f"  (could not set retry policy for {name}: {e.response['Error']['Code']}; skipping)")
+
+
 def ensure_s3_trigger(process_arn: str):
     try:
         lam.add_permission(
@@ -148,7 +163,7 @@ def ensure_s3_trigger(process_arn: str):
         NotificationConfiguration={"LambdaFunctionConfigurations": [{
             "Id": "bigprint-uploads",
             "LambdaFunctionArn": process_arn,
-            "Events": ["s3:ObjectCreated:Put"],
+            "Events": ["s3:ObjectCreated:*"],
             "Filter": {"Key": {"FilterRules": [
                 {"Name": "prefix", "Value": "uploads/"},
                 {"Name": "suffix", "Value": ".jpg"},
@@ -164,7 +179,7 @@ def ensure_lifecycle():
             {"ID": f"expire-{p}", "Status": "Enabled", "Filter": {"Prefix": f"{p}/"},
              "Expiration": {"Days": 1},
              "AbortIncompleteMultipartUpload": {"DaysAfterInitiation": 1}}
-            for p in ("uploads", "results", "sessions", "counters")
+            for p in ("uploads", "results", "sessions", "counters", "ratelimit")
         ]},
     )
 
@@ -193,6 +208,7 @@ def main():
     capture_arn = ensure_function("bigprint-tv-capture", FUNCTIONS["bigprint-tv-capture"])
     process_arn = ensure_function("bigprint-tv-process", FUNCTIONS["bigprint-tv-process"])
     url = ensure_url("bigprint-tv-capture")
+    ensure_no_retries("bigprint-tv-process")
     ensure_s3_trigger(process_arn)
     ensure_lifecycle()
     print()

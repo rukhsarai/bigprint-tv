@@ -110,6 +110,11 @@ const NO_NETWORK =
 /** Renew this long before the backend would expire the session, in seconds. */
 const RENEW_MARGIN_SECONDS = 10 * 60;
 
+/** The backend gives up after two minutes; the TV should not wait much longer. */
+export const PROCESSING_TIMEOUT_MS = 150 * 1000;
+const TOOK_TOO_LONG =
+  'That took too long. Please take the photo again.';
+
 /**
  * Talks to the capture Lambda. One session per subscription; polls for a
  * result every POLL_INTERVAL_MS; renews the session before it expires.
@@ -120,14 +125,17 @@ export const createRemoteDocumentService = (
   pollIntervalMs: number = POLL_INTERVAL_MS,
 ): DocumentService => {
   const base = baseUrl.replace(/\/+$/, '');
-  // Remembered so audioUrl() can sign requests for the current session.
+  // The live session, and the session each document arrived under: audio for
+  // a page already on screen must keep working after the session is renewed.
   let current: {code: string; secret: string; expiresAt: number} | null = null;
+  const credentialsFor = new Map<string, {code: string; secret: string}>();
 
   const audioUrl = (document: ScannedDocument, lineIndex: number) => {
-    if (!current || !document.speech || !document.speech[lineIndex]) {
+    const creds = credentialsFor.get(document.id) ?? current;
+    if (!creds || !document.speech || !document.speech[lineIndex]) {
       return null;
     }
-    const q = `c=${current.code}&k=${encodeURIComponent(current.secret)}`;
+    const q = `c=${creds.code}&k=${encodeURIComponent(creds.secret)}`;
     return `${base}/audio?${q}&d=${encodeURIComponent(document.id)}&n=${lineIndex}`;
   };
 
@@ -138,6 +146,7 @@ export const createRemoteDocumentService = (
       let timer: ReturnType<typeof setTimeout> | null = null;
       let lastDocumentId = '';
       let lastState: ResultResponse['state'] = 'idle';
+      let processingSince: number | null = null;
 
       const schedule = (fn: () => void, ms: number) => {
         if (!active) {
@@ -205,10 +214,28 @@ export const createRemoteDocumentService = (
           }
           if (body.document && body.document.id !== lastDocumentId) {
             lastDocumentId = body.document.id;
+            if (current) {
+              credentialsFor.set(body.document.id, {
+                code: current.code,
+                secret: current.secret,
+              });
+            }
+            processingSince = null;
             listener.onDocument(body.document);
-          } else if (body.state === 'processing' && lastState !== 'processing') {
-            listener.onProcessing();
+          } else if (body.state === 'processing') {
+            if (lastState !== 'processing') {
+              processingSince = Date.now();
+              listener.onProcessing();
+            } else if (
+              processingSince !== null &&
+              Date.now() - processingSince > PROCESSING_TIMEOUT_MS
+            ) {
+              // The backend never answered (a timeout upstream). Say so once.
+              processingSince = null;
+              listener.onError(TOOK_TOO_LONG);
+            }
           } else if (body.state === 'error' && lastState !== 'error') {
+            processingSince = null;
             listener.onError(
               body.message || 'We could not read that photo. Please try again.',
             );
