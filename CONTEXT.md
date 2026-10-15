@@ -59,9 +59,9 @@ Judging criteria: Tech Implementation, Design, Potential Impact, Quality of Idea
 | Text size | 1x / 1.25x / 1.5x / 2x, persisted, shared across screens |
 | Accessibility | Audited against Amazon's A11Y Compass and fixed; new states have spoken equivalents |
 | Backend | Two Lambdas + S3, deployed; see `backend/README.md` |
-| Pipeline | Textract LAYOUT+TABLES → Nova Lite classify → AnalyzeExpense + Nova Pro image cross-check → Nova Pro rewrite → numeric guard → Polly neural with word marks |
-| Tests | App: 41 Jest tests, typecheck clean, 0 lint errors. Backend: 14 unit tests |
-| Abuse limits | 128-bit session secret, JPEG-only 4 MB uploads, 20 per session, reserved concurrency, 500 docs/day cap, 1-day data expiry |
+| Pipeline | Textract LAYOUT+TABLES (headings kept) → Nova Lite classify → AnalyzeExpense + Nova Pro image cross-check → Nova Pro rewrite with the letter fenced as data → whole-figure numeric guard → Polly neural with word marks |
+| Tests | App: 49 Jest tests, typecheck clean, 0 lint errors. Backend: 26 unit tests |
+| Abuse limits | 128-bit session secret, JPEG-only 4 MB uploads, 20 per session, 40 sessions and 80 uploads per address per day, a 200 docs/day cap spent only after a real read, 1-day data expiry |
 
 ### Unverified
 
@@ -77,6 +77,11 @@ Judging criteria: Tech Implementation, Design, Potential Impact, Quality of Idea
 - **The app icon.** `assets/icon.png` (512×512) exists; wiring it into
   `manifest.toml` needs the `[package]` icon key checked against the Vega docs
   with `vega exec vpt validate manifest.toml`.
+- **Lambda retry policy.** `aws/deploy.py` sets the processing function to zero
+  async retries so a timed-out read is not re-run at full price; that call needs
+  `lambda:PutFunctionEventInvokeConfig`, which is in the current
+  `aws/iam-policy-phase2.json` but may not be on the user yet. Processing is
+  idempotent either way (a retry sees the finished status and stops).
 
 ### Not started
 
@@ -189,6 +194,13 @@ Nova Pro *is* shown the photo and asked for the same figures — but only so it
 can **veto** a Textract reading it disagrees with. A disputed money figure is
 hidden and the page is flagged low-confidence. Nova can never add a figure.
 
+### A letter is data, not instructions
+
+Scam post targets exactly this audience. The model's rules live in the system
+turn and the OCR text is fenced as `<letter>…</letter>` with an explicit rule
+that text addressed to a computer is reported, not obeyed. Key figures never
+come from the model, so an injected "you owe £820" cannot become a pinned fact.
+
 ### Every number the model writes must exist in the OCR text
 
 On a real fuel receipt the first pipeline produced "The amount for diesel is 8"
@@ -199,9 +211,13 @@ and "The total amount is 1" — real digits, wrong rows. Two fixes:
    `AnalyzeDocument` with LAYOUT + TABLES lets `structure_blocks()` rebuild
    each row as `cell | cell | cell` in reading order. 12× the OCR price, still
    under a quarter of the per-document cost.
-2. **`numeric_guard()`.** A rewritten line whose digit-runs are not all present
-   in the OCR text is dropped. Catches invented and recalculated numbers; the
-   layout step is what prevents right-digits-wrong-row.
+2. **`numeric_guard()`.** A rewritten line whose figures are not all on the
+   page is dropped. A figure is matched whole and in order ("76.44" matches
+   "£76.44", "44.76" does not; the "8" in "28.8" never counts as an 8), so
+   recalculated, transposed and invented numbers go, while regrouped phone
+   numbers and spoken money ("92 pounds 58") survive. Empty table cells keep
+   their column and values are paired with their headings, which is what
+   prevents right-digits-wrong-row.
 
 ### Anything below 90% confidence is dropped, not shown
 
@@ -221,7 +237,11 @@ cannot be typed anyway.
 
 `bigprint-tv-capture` can write a photo and read a result, nothing else. If the
 public endpoint is abused, the worst case is bounded by the processing
-function's daily cap, not by the attacker's imagination.
+function's daily cap, not by the attacker's imagination. The review panel found
+the first version of that cap could be exhausted by anyone with curl in a
+minute, taking the service down for every real user until midnight: it is now
+spent only after a photo has actually been read, every address gets 40 sessions
+and 80 uploads a day, and the counters use S3 conditional writes.
 
 ### Audio is one MP3 per line, from Polly, with word marks
 
