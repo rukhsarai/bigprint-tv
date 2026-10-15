@@ -31,11 +31,12 @@ TV ◀──GET /audio─────── capture Lambda                      
   hash of the two, so the code alone opens nothing, and nothing is guessable.
 - The public function can only write photos and read finished results. The
   processing function has no endpoint at all.
-- Limits: 4 MB and JPEG-only per upload, 20 uploads per session, sessions expire
-  after 2 hours, reserved concurrency 5 (capture) and 3 (process) where the
+- Limits: 4 MB and JPEG-only per upload, 20 uploads per session, 40 sessions and
+  80 uploads per network address per day, sessions expire after 2 hours, reserved concurrency 5 (capture) and 3 (process) where the
   account allows it (a new account's 10-execution limit cannot be carved up, and
-  then simply acts as the cap), and a global **500 documents per day** cap. Worst case for a determined abuser is about
-  $40 of AI calls in a day, and the budget alarm fires long before that.
+  then simply acts as the cap), and a global **200 documents per day** cap that is only spent once a photo has
+  actually been read. Worst case for a determined abuser is about $20 of AI calls
+  in a day, and the budget alarm fires before that.
 - Photos, results, sessions and counters are deleted by an S3 lifecycle rule
   after one day. These are photographs of people's private post.
 - Logs never contain document text, only sizes, ids and error types.

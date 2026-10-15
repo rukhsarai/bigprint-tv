@@ -39,10 +39,11 @@ BUCKET = os.environ["BUCKET"]
 SESSION_TTL_SECONDS = int(os.environ.get("SESSION_TTL_SECONDS", str(2 * 60 * 60)))
 MAX_UPLOADS_PER_SESSION = int(os.environ.get("MAX_UPLOADS_PER_SESSION", "20"))
 MAX_UPLOAD_BYTES = int(os.environ.get("MAX_UPLOAD_BYTES", str(4 * 1024 * 1024)))
-# Per source address, per hour. Generous for a care home behind one router,
-# tight enough that one laptop cannot exhaust the daily cap.
-MAX_SESSIONS_PER_IP_HOUR = int(os.environ.get("MAX_SESSIONS_PER_IP_HOUR", "30"))
-MAX_UPLOADS_PER_IP_HOUR = int(os.environ.get("MAX_UPLOADS_PER_IP_HOUR", "60"))
+# Per source address, per day. Generous for a care home behind one router,
+# and small next to the processing function's daily cap, so one machine can
+# never use that cap up for everyone.
+MAX_SESSIONS_PER_IP_DAY = int(os.environ.get("MAX_SESSIONS_PER_IP_DAY", "40"))
+MAX_UPLOADS_PER_IP_DAY = int(os.environ.get("MAX_UPLOADS_PER_IP_DAY", "80"))
 
 s3 = boto3.client("s3")
 
@@ -142,9 +143,9 @@ def _source_ip(event) -> str:
 
 
 def _ip_allowed(event, action: str, limit: int) -> bool:
-    """Per-address hourly budget. The address is hashed; nothing identifying is stored."""
-    hour = time.strftime("%Y-%m-%d-%H", time.gmtime())
-    key = f"ratelimit/{_sha(_source_ip(event))[:16]}/{hour}.json"
+    """Per-address daily budget. The address is hashed; nothing identifying is stored."""
+    day = time.strftime("%Y-%m-%d", time.gmtime())
+    key = f"ratelimit/{_sha(_source_ip(event))[:16]}/{day}.json"
     return _bump(key, action, limit)
 
 
@@ -176,7 +177,7 @@ def _body_bytes(event) -> bytes:
 
 def create_session(event):
     """The TV calls this when it shows the pairing screen."""
-    if not _ip_allowed(event, "sessions", MAX_SESSIONS_PER_IP_HOUR):
+    if not _ip_allowed(event, "sessions", MAX_SESSIONS_PER_IP_DAY):
         return _error(429, "Too many requests from this network. Please try again later.")
     for _ in range(5):
         code = f"{secrets.randbelow(1_000_000):06d}"
@@ -224,7 +225,7 @@ def upload(event, params):
         return _error(413, "That photo is too large. Please try again.")
     if len(data) < 1024 or not data.startswith(b"\xff\xd8\xff"):
         return _error(415, "Please send a JPEG photo taken with the camera.")
-    if not _ip_allowed(event, "uploads", MAX_UPLOADS_PER_IP_HOUR):
+    if not _ip_allowed(event, "uploads", MAX_UPLOADS_PER_IP_DAY):
         return _error(429, "Too many photos from this network. Please try again later.")
     if not _bump(f"sessions/{session['code']}.json", "uploads", MAX_UPLOADS_PER_SESSION):
         return _error(429, "That is enough pages for one session. Please scan the QR code on the TV again.")
