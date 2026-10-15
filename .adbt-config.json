@@ -1,0 +1,8 @@
+{
+  "project": {
+    "identifier": "com.bigprint.tv"
+  },
+  "platform": {
+    "default": "vega_os"
+  }
+}
