@@ -1,5 +1,5 @@
 import 'react-native';
-import {render, screen, waitFor} from '@testing-library/react-native';
+import {fireEvent, render, screen, waitFor} from '@testing-library/react-native';
 import * as React from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -33,6 +33,8 @@ describe('App', () => {
 
   beforeEach(async () => {
     await AsyncStorage.clear();
+    // A look has been chosen before, so these tests start on pairing.
+    await AsyncStorage.setItem('bigprint.colours', 'dark');
     // The QR library and some RN internals use randomness; pin it so the
     // snapshot captures layout, not luck.
     randomSpy = jest.spyOn(Math, 'random').mockReturnValue(0.5);
@@ -54,7 +56,7 @@ describe('App', () => {
     expect(screen.getByText('Read anything on your TV')).toBeTruthy();
     expect(
       screen.getByText(
-        '2. Tap the link that pops up, then photograph the letter',
+        'Tap the link that pops up, then photograph the letter',
       ),
     ).toBeTruthy();
     expect(screen.getByTestId('pairing-waiting')).toBeTruthy();
@@ -114,6 +116,57 @@ describe('App', () => {
     render(<App service={neverDelivers} />);
     await waitFor(() =>
       expect(screen.getByText(/^Text size 1\.5x \(saved\)/)).toBeTruthy(),
+    );
+  });
+
+  it('asks which colours are easier to read on first run', async () => {
+    await AsyncStorage.removeItem('bigprint.colours');
+    render(<App service={neverDelivers} />);
+    await waitFor(() =>
+      expect(screen.getByText('Which is easier to read?')).toBeTruthy(),
+    );
+    expect(screen.getByTestId('colours-dark')).toBeTruthy();
+    expect(screen.getByTestId('colours-light')).toBeTruthy();
+    expect(screen.getByTestId('colours-yellow')).toBeTruthy();
+    // Pairing waits until a look is chosen.
+    expect(screen.queryByText('Read anything on your TV')).toBeNull();
+
+    fireEvent.press(screen.getByTestId('colours-light'));
+    await settled();
+    expect(screen.getByText('Read anything on your TV')).toBeTruthy();
+    expect(screen.getByText('Colours: Light')).toBeTruthy();
+    await waitFor(async () =>
+      expect(await AsyncStorage.getItem('bigprint.colours')).toBe('light'),
+    );
+  });
+
+  it('remembers the chosen colours and skips the question next time', async () => {
+    await AsyncStorage.setItem('bigprint.colours', 'yellow');
+    render(<App service={neverDelivers} />);
+    await settled();
+    expect(screen.queryByText('Which is easier to read?')).toBeNull();
+    expect(screen.getByText('Colours: Yellow')).toBeTruthy();
+  });
+
+  it('the Colours button moves to the next look and remembers it', async () => {
+    render(<App service={neverDelivers} />);
+    await settled();
+    expect(screen.getByText('Colours: Dark')).toBeTruthy();
+    fireEvent.press(screen.getByTestId('colours-button'));
+    expect(screen.getByText('Colours: Light')).toBeTruthy();
+    await waitFor(async () =>
+      expect(await AsyncStorage.getItem('bigprint.colours')).toBe('light'),
+    );
+    fireEvent.press(screen.getByTestId('colours-button'));
+    fireEvent.press(screen.getByTestId('colours-button'));
+    expect(screen.getByText('Colours: Dark')).toBeTruthy();
+  });
+
+  it('ignores a saved value it does not recognise and asks again', async () => {
+    await AsyncStorage.setItem('bigprint.colours', 'purple');
+    render(<App service={neverDelivers} />);
+    await waitFor(() =>
+      expect(screen.getByText('Which is easier to read?')).toBeTruthy(),
     );
   });
 

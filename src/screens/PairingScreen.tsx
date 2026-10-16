@@ -1,11 +1,10 @@
 import 'fast-text-encoding'; // Required before the QR import — see Vega known issues.
 
-import React, {useState} from 'react';
+import React from 'react';
 // Vega's components, not stock react-native: the Fire TV accessibility props
 // (accessibilityDescribedBy, accessibilityOrientationText) are declared here.
 import {
   Dimensions,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -17,6 +16,18 @@ import QRCode from '@amazon-devices/react-native-qrcode-svg';
 import {useTextScale} from '../hooks/useTextScale';
 import type {IncomingStatus} from '../hooks/useIncomingDocument';
 import type {PairingSession} from '../services/documentService';
+import {useColours} from '../theme/ColoursProvider';
+import {useDesignUnits, type TextType} from '../theme/layout';
+import {layout} from '../theme/styles';
+import type {Colours} from '../theme/colours';
+import {TvButton} from '../components/TvButton';
+import {
+  CameraIcon,
+  CheckIcon,
+  PhoneIcon,
+  TvIcon,
+  WarningIcon,
+} from '../components/Icons';
 
 type Props = {
   status: IncomingStatus;
@@ -38,14 +49,29 @@ const STATUS_TEXT: Record<IncomingStatus, string> = {
   error: '',
 };
 
+const STEPS = [
+  {Icon: PhoneIcon, text: 'Point a phone camera at the square on the right'},
+  {
+    Icon: CameraIcon,
+    text: 'Tap the link that pops up, then photograph the letter',
+  },
+  {Icon: TvIcon, text: 'It appears here in large print, and can be read aloud'},
+];
+
 export const PairingScreen = ({status, session, error}: Props) => {
-  const {scale, typeAt, restored, changeScale, canGoBigger, canGoSmaller} =
+  const {scale, scaled, restored, changeScale, canGoBigger, canGoSmaller} =
     useTextScale();
+  const {colours, cycle} = useColours();
+  const {dp, type} = useDesignUnits();
+  // Text that follows the viewer's text size.
+  const t = (px: number) => type(scaled(px));
   const spokenCode = session ? session.code.split('').join(' ') : '';
+  const processing = status === 'processing';
+  const failed = status === 'error' && !!error;
+
   // Shown in the debug line so a tester can read the logical viewport off the
-  // screen: the instruction block overflowed at 1x on the virtual device, and
-  // the layout below only does that at a logical size well under 1080p. A TV
-  // window does not change size, so a one-off read is enough.
+  // screen. Every size is in design pixels scaled to this window, so the
+  // layout matches the 1920 × 1080 drawing whatever the TV reports.
   const window = Dimensions.get('window');
   const windowText = `${Math.round(window.width)}×${Math.round(
     window.height,
@@ -53,266 +79,318 @@ export const PairingScreen = ({status, session, error}: Props) => {
 
   return (
     <View
-      style={styles.screen}
+      style={[
+        layout.fill,
+        {
+          backgroundColor: colours.background,
+          // TV overscan safe area: ~5% inset so nothing is lost on real hardware.
+          paddingHorizontal: dp(96),
+          paddingVertical: dp(54),
+        },
+      ]}
       accessibilityOrientationText={
         'Pairing screen. Ask someone to point a phone camera at the square ' +
         'on the right of the screen, then take a photo of a letter. ' +
         'It will appear here in large print and can be read aloud. ' +
-        'Text size controls are at the bottom left.'
+        'Text size and colour controls are at the bottom left.'
       }>
-      <View style={styles.left}>
-        {/* Nothing in this block can take focus, so a remote cannot scroll it:
-            whatever does not fit above the controls is simply cut off. The
-            title is kept compact to give the three steps room. On the virtual
-            device the block overflowed at 1x before the title was shrunk;
-            whether it fits now is unverified (see HANDOFF.md, open bug). */}
-        <ScrollView
-          style={styles.textScroll}
-          contentContainerStyle={styles.textScrollContent}
-          showsVerticalScrollIndicator={false}>
-          <Text role="heading" style={[styles.title, typeAt(40)]}>
-            Read anything on your TV
-          </Text>
+      <Text role="heading" style={[layout.bold, {color: colours.text}, t(44)]}>
+        {processing ? 'Reading your letter' : 'Read anything on your TV'}
+      </Text>
 
-          <Text style={[styles.body, typeAt(24)]}>
-            1. Point a phone camera at the square on the right
-          </Text>
-          <Text style={[styles.body, typeAt(24)]}>
-            2. Tap the link that pops up, then photograph the letter
-          </Text>
-          <Text style={[styles.body, typeAt(24)]}>
-            3. It appears here in large print, and can be read aloud
-          </Text>
-        </ScrollView>
+      <View style={[layout.fillRow, {marginTop: dp(28)}]}>
+        <View style={[styles.stepsColumn, {paddingRight: dp(64)}]}>
+          {/* Nothing in here takes focus, so a remote cannot scroll it; the
+              scroll view only keeps an overflow at the largest text sizes
+              from being drawn over the status line. */}
+          <ScrollView
+            style={layout.fill}
+            contentContainerStyle={{paddingBottom: dp(16)}}
+            showsVerticalScrollIndicator={false}>
+            {failed ? (
+              <ProblemPanel message={error!} colours={colours} dp={dp} t={t} />
+            ) : processing ? (
+              <Progress colours={colours} dp={dp} t={t} />
+            ) : (
+              STEPS.map((step, index) => (
+                <Step
+                  key={step.text}
+                  number={index + 1}
+                  text={step.text}
+                  icon={<step.Icon size={dp(56)} color={colours.text} />}
+                  colours={colours}
+                  dp={dp}
+                  t={t}
+                />
+              ))
+            )}
+          </ScrollView>
 
-        {/* Controls stay put so they are never scrolled off screen. */}
-        <View style={styles.controls}>
-          {/* role="alert" so the screen reader speaks it without needing focus,
-              which it can never receive. */}
-          {status === 'error' && error ? (
-            <Text
-              role="alert"
-              style={[styles.error, typeAt(24)]}
-              testID="pairing-error">
-              {error}
-            </Text>
-          ) : (
-            <Text
-              // Spoken whenever it changes, so a blind user hears "waiting"
-              // (time to ask for a scan) and "reading" without moving focus.
-              aria-live="polite"
-              style={[styles.waiting, typeAt(24)]}
-              testID={`pairing-${status}`}>
-              {STATUS_TEXT[status]}
-            </Text>
+          {failed ? null : (
+            <View
+              style={[
+                layout.row,
+                layout.startSelf,
+                {
+                  marginTop: dp(16),
+                  paddingVertical: dp(18),
+                  paddingHorizontal: dp(28),
+                  borderRadius: dp(12),
+                  borderWidth: dp(4),
+                  borderColor: colours.cardEdge,
+                  backgroundColor: colours.cardFill,
+                },
+              ]}>
+              <View
+                style={{
+                  width: dp(22),
+                  height: dp(22),
+                  borderRadius: dp(11),
+                  marginRight: dp(18),
+                  backgroundColor: colours.text,
+                }}
+              />
+              <Text
+                // Spoken whenever it changes, so a blind user hears "waiting"
+                // (time to ask for a scan) and "reading" without moving focus.
+                aria-live="polite"
+                style={[{color: colours.text}, t(30)]}
+                testID={`pairing-${status}`}>
+                {STATUS_TEXT[status]}
+              </Text>
+            </View>
           )}
-          <TVFocusGuideView style={styles.buttonRow}>
-            <SizeButton
-              label="Bigger text"
-              onPress={() => changeScale(1)}
-              disabled={!canGoBigger}
-              hasTVPreferredFocus
-              describedBy={['pairing-code-label', 'pairing-code']}
-            />
-            <SizeButton
-              label="Smaller text"
-              onPress={() => changeScale(-1)}
-              disabled={!canGoSmaller}
-            />
-          </TVFocusGuideView>
+        </View>
 
-          <Text style={styles.debug}>
-            {restored
-              ? `Text size ${scale}x (saved) · ${windowText}`
-              : 'Loading your settings…'}
+        {/* The QR and code never scroll — a user cannot pair without them. */}
+        <View style={styles.qrColumn}>
+          {/* The QR carries information, so it needs a spoken equivalent. A
+              screen reader user cannot scan it themselves; they need to know
+              what to ask for and what code the helper's phone will show. */}
+          <View
+            nativeID="pairing-qr"
+            accessible={true}
+            aria-label={
+              session
+                ? `Square code for a phone camera. Ask someone to scan it to send a photo. Their phone will show the code ${spokenCode}.`
+                : 'Square code for a phone camera. Getting ready.'
+            }
+            style={[
+              layout.qrPaper,
+              {
+                padding: dp(24),
+                borderRadius: dp(12),
+                borderWidth: dp(3),
+                borderColor: colours.qrEdge,
+              },
+            ]}>
+            {session ? (
+              <QRCode value={session.captureUrl} size={dp(300)} ecl="M" />
+            ) : (
+              <View
+                style={[
+                  layout.qrPlaceholder,
+                  {width: dp(300), height: dp(300)},
+                ]}
+                testID="qr-placeholder"
+              />
+            )}
+          </View>
+          {/* Fixed sizes: this block must fit beside the steps at every text size. */}
+          <Text
+            nativeID="pairing-code-label"
+            style={[
+              layout.textCentre,
+              {color: colours.textSecondary, marginTop: dp(20)},
+              type(22),
+            ]}>
+            {session ? 'The phone will show this code' : ' '}
+          </Text>
+          <Text
+            nativeID="pairing-code"
+            testID="pairing-code"
+            style={[
+              layout.bold,
+              layout.textCentre,
+              {color: colours.text, letterSpacing: dp(6)},
+              type(56),
+            ]}>
+            {session ? formatCode(session.code) : '--- ---'}
           </Text>
         </View>
       </View>
 
-      {/* The QR and code never scroll — a user cannot pair without them. */}
-      <View style={styles.right}>
-        {/* The QR carries information, so it needs a spoken equivalent. A
-            screen reader user cannot scan it themselves; they need to know
-            what to ask for and what code the helper's phone will show. */}
-        <View
-          style={styles.qrFrame}
-          nativeID="pairing-qr"
-          accessible={true}
-          aria-label={
-            session
-              ? `Square code for a phone camera. Ask someone to scan it to send a photo. Their phone will show the code ${spokenCode}.`
-              : 'Square code for a phone camera. Getting ready.'
-          }>
-          {session ? (
-            <QRCode value={session.captureUrl} size={300} ecl="M" />
-          ) : (
-            <View style={styles.qrPlaceholder} testID="qr-placeholder" />
-          )}
-        </View>
-        <Text nativeID="pairing-code-label" style={styles.codeLabel}>
-          {session ? 'The phone will show this code' : ' '}
+      {/* Controls stay put so they are never scrolled off screen. */}
+      <TVFocusGuideView style={[layout.rowWrap, {marginTop: dp(28)}]}>
+        <TvButton
+          label="Bigger text"
+          onPress={() => changeScale(1)}
+          disabled={!canGoBigger}
+          hasTVPreferredFocus
+          // The pairing code can never take focus, so link it to the first control.
+          describedBy={['pairing-code-label', 'pairing-code']}
+          testID="size-button-Bigger text"
+          fontPx={30}
+        />
+        <TvButton
+          label="Smaller text"
+          onPress={() => changeScale(-1)}
+          disabled={!canGoSmaller}
+          testID="size-button-Smaller text"
+          fontPx={30}
+        />
+        <TvButton
+          label={`Colours: ${colours.shortLabel}`}
+          accessibilityLabel={`Colours, ${colours.label}. Press to change.`}
+          onPress={cycle}
+          testID="colours-button"
+          fontPx={30}
+        />
+        <Text
+          style={[{color: colours.textSecondary, marginLeft: dp(8)}, type(22)]}>
+          {restored
+            ? `Text size ${scale}x (saved) · ${windowText}`
+            : 'Loading your settings…'}
         </Text>
-        <Text nativeID="pairing-code" style={styles.code} testID="pairing-code">
-          {session ? formatCode(session.code) : '--- ---'}
+        <View style={layout.fill} />
+        <Text style={[{color: colours.textSecondary}, type(22)]}>
+          Left and Right to choose · Select to press · Back to leave
         </Text>
-      </View>
+      </TVFocusGuideView>
     </View>
   );
 };
 
-type SizeButtonProps = {
-  label: string;
-  onPress: () => void;
-  disabled?: boolean;
-  hasTVPreferredFocus?: boolean;
-  describedBy?: string[];
+type PartProps = {
+  colours: Colours;
+  dp: (px: number) => number;
+  t: (px: number) => TextType;
 };
 
-const SizeButton = ({
-  label,
-  onPress,
-  disabled,
-  hasTVPreferredFocus,
-  describedBy,
-}: SizeButtonProps) => {
-  const [focused, setFocused] = useState(false);
-  return (
-    <Pressable
-      accessible={true}
-      // Not `disabled`: a disabled Pressable cannot take focus. With text at
-      // 2x the preferred-focus button is "Bigger text", which is at its limit,
-      // so the screen would open with nothing focused.
-      onPress={disabled ? undefined : onPress}
-      accessibilityState={{disabled: !!disabled}}
-      hasTVPreferredFocus={hasTVPreferredFocus}
-      onFocus={() => setFocused(true)}
-      onBlur={() => setFocused(false)}
-      role="button"
-      aria-label={label}
-      // The pairing code can never take focus, so link it to the first control.
-      accessibilityDescribedBy={describedBy}
-      testID={`size-button-${label}`}
-      style={[
-        styles.button,
-        focused && styles.buttonFocused,
-        disabled && styles.buttonDisabled,
-      ]}>
-      <Text style={[styles.buttonText, focused && styles.buttonTextFocused]}>
-        {label}
+const Badge = ({
+  colours,
+  dp,
+  children,
+  hollow,
+}: {
+  colours: Colours;
+  dp: (px: number) => number;
+  children: React.ReactNode;
+  hollow?: boolean;
+}) => (
+  <View
+    style={[
+      layout.centre,
+      {
+        width: dp(72),
+        height: dp(72),
+        borderRadius: dp(36),
+        marginRight: dp(24),
+        backgroundColor: hollow ? colours.background : colours.badgeFill,
+        borderWidth: dp(hollow ? 6 : 0),
+        borderColor: colours.text,
+      },
+    ]}>
+    {children}
+  </View>
+);
+
+const Numeral = ({
+  value,
+  color,
+  dp,
+}: {
+  value: number;
+  color: string;
+  dp: (px: number) => number;
+}) => (
+  <Text style={[layout.bold, {color, fontSize: dp(36), lineHeight: dp(44)}]}>
+    {value}
+  </Text>
+);
+
+const Step = ({
+  number,
+  text,
+  icon,
+  colours,
+  dp,
+  t,
+}: PartProps & {number: number; text: string; icon: React.ReactNode}) => (
+  <View style={[layout.row, {marginBottom: dp(32)}]}>
+    <Badge colours={colours} dp={dp}>
+      <Numeral value={number} color={colours.badgeText} dp={dp} />
+    </Badge>
+    <View style={{marginRight: dp(24)}}>{icon}</View>
+    <Text style={[layout.fill, {color: colours.text}, t(30)]}>{text}</Text>
+  </View>
+);
+
+/**
+ * Two honest steps: the backend reports only "processing", so the TV cannot
+ * tell reading the words apart from making the voice.
+ */
+const Progress = ({colours, dp, t}: PartProps) => (
+  <View>
+    <View style={[layout.row, {marginBottom: dp(32)}]}>
+      <Badge colours={colours} dp={dp}>
+        <CheckIcon size={dp(40)} color={colours.badgeText} />
+      </Badge>
+      <Text style={[layout.fill, {color: colours.text}, t(30)]}>
+        Photo received
+        <Text style={{color: colours.textSecondary}}> — done</Text>
       </Text>
-    </Pressable>
-  );
-};
+    </View>
+    <View style={[layout.row, {marginBottom: dp(32)}]}>
+      <Badge colours={colours} dp={dp} hollow>
+        <Numeral value={2} color={colours.text} dp={dp} />
+      </Badge>
+      <Text style={[layout.fill, layout.bold, {color: colours.text}, t(30)]}>
+        Reading the words and making the voice
+        <Text style={[layout.regular, {color: colours.textSecondary}]}>
+          {' '}
+          — now
+        </Text>
+      </Text>
+    </View>
+  </View>
+);
 
-// High contrast throughout: this audience needs it, not decoration.
+/** A problem is a panel with an icon and a first word, never colour alone. */
+const ProblemPanel = ({
+  message,
+  colours,
+  dp,
+  t,
+}: PartProps & {message: string}) => (
+  <View
+    style={{
+      padding: dp(32),
+      borderRadius: dp(16),
+      borderWidth: dp(6),
+      borderColor: colours.attention,
+      backgroundColor: colours.panelFill,
+    }}>
+    <View style={[layout.row, {marginBottom: dp(16)}]}>
+      <View style={{marginRight: dp(20)}}>
+        <WarningIcon size={dp(56)} color={colours.attention} />
+      </View>
+      <Text style={[layout.bold, {color: colours.attentionWord}, t(40)]}>
+        Problem
+      </Text>
+    </View>
+    {/* role="alert" so the screen reader speaks it without needing focus,
+        which it can never receive. */}
+    <Text
+      role="alert"
+      style={[{color: colours.text}, t(30)]}
+      testID="pairing-error">
+      {message}
+    </Text>
+  </View>
+);
+
 const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    flexDirection: 'row',
-    backgroundColor: '#000000',
-    // TV overscan safe area: ~5% inset so nothing is lost on real hardware.
-    paddingHorizontal: 96,
-    paddingVertical: 54,
-  },
-  left: {
-    flex: 3,
-    paddingRight: 48,
-  },
-  textScroll: {
-    flex: 1,
-  },
-  textScrollContent: {
-    justifyContent: 'center',
-    flexGrow: 1,
-    paddingBottom: 16,
-  },
-  controls: {
-    flexShrink: 0,
-  },
-  right: {
-    flex: 2,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  title: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-    marginBottom: 16,
-  },
-  body: {
-    color: '#FFFFFF',
-    marginBottom: 8,
-  },
-  // Fixed sizes: this block must fit beside the QR at every text scale.
-  codeLabel: {
-    color: '#CCCCCC',
-    fontSize: 20,
-    marginTop: 20,
-    textAlign: 'center',
-  },
-  code: {
-    color: '#FFD400',
-    fontSize: 52,
-    fontWeight: '700',
-    letterSpacing: 6,
-    textAlign: 'center',
-  },
-  buttonRow: {
-    flexDirection: 'row',
-    // Wrap rather than overflow: a third button must not spill over the QR.
-    flexWrap: 'wrap',
-    marginTop: 24,
-  },
-  button: {
-    backgroundColor: '#222222',
-    borderWidth: 3,
-    borderColor: '#555555',
-    borderRadius: 8,
-    paddingHorizontal: 22,
-    paddingVertical: 14,
-    marginRight: 16,
-    marginBottom: 12,
-  },
-  buttonFocused: {
-    backgroundColor: '#FFD400',
-    borderColor: '#FFFFFF',
-  },
-  // Dimming to 0.4 is a contrast failure for exactly the users this app serves.
-  buttonDisabled: {
-    backgroundColor: '#111111',
-    borderColor: '#767676',
-    borderStyle: 'dashed',
-  },
-  buttonText: {
-    color: '#FFFFFF',
-    fontSize: 26,
-    fontWeight: '600',
-  },
-  buttonTextFocused: {
-    color: '#000000',
-  },
-  waiting: {
-    color: '#FFFFFF',
-    marginBottom: 4,
-  },
-  error: {
-    color: '#FF9A3C',
-    fontWeight: '700',
-    marginBottom: 4,
-  },
-  debug: {
-    color: '#CCCCCC',
-    fontSize: 20,
-    marginTop: 16,
-  },
-  qrFrame: {
-    backgroundColor: '#FFFFFF',
-    padding: 24,
-    borderRadius: 12,
-  },
-  qrPlaceholder: {
-    width: 300,
-    height: 300,
-    backgroundColor: '#EEEEEE',
-  },
+  stepsColumn: {flex: 3, minWidth: 0},
+  qrColumn: {flex: 2, alignItems: 'center', justifyContent: 'center'},
 });

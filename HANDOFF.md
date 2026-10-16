@@ -62,6 +62,49 @@ against the live backend).
   `{fontSize, lineHeight}` (ratio 1.4) and every scaled text on both screens
   uses it.
 
+## Three-look UI (implemented, not yet seen on a device)
+
+Built from the design canvas after colour research (sources on its
+"Colour research" board). What is in `src/`:
+
+- **Three looks**, `src/theme/colours.ts`: Dark (default), Light, Yellow on
+  black. `ColoursProvider` remembers the choice under `bigprint.colours`.
+  A first-run screen (`FirstRunColours`) asks "Which is easier to read?"
+  until one is chosen; the Colours button on both screens cycles them.
+  `test/colours.spec.ts` checks every text pair at 7:1 and every mark at 3:1.
+- **Letters never flip.** A focused line keeps its colours and gets a 14 px
+  ring; the spoken word gets a 12 px bar underneath. The bar needs each
+  word laid out separately (nested text cannot draw a bar of set
+  thickness), so `DocumentView` splits lines into words; the space for the
+  bar is always reserved, so text never moves while it is read.
+- **Yellow means focus** on Dark, and nothing else: key figures are white in
+  grey-edged cards and the pairing code is white. Light has no yellow.
+- **Problems and checks are panels** with an icon and a first word.
+- **Read whole letter** plays the lines one after another (skipping blank
+  lines), scrolls the list to the line being read, and stops after the
+  last line, on Back, or on Stop reading. Pressing a line reads just that one.
+- **Design scale**, `src/theme/layout.ts`: every size is in 1920 × 1080
+  design pixels, multiplied by `min(width / 1920, height / 1080)` of the
+  window. On a 1920 × 1080 window nothing changes; on a 960 × 540 one the
+  layout matches the drawing instead of overflowing. This is also the
+  intended fix for the open bug below, if the window turns out smaller.
+- **Icons** use `react-native-svg`, imported under the same name as the QR
+  library. Importing it as `@amazon-devices/react-native-svg` as well
+  loads a second copy and registers every SVG view twice (it crashed Jest;
+  it would crash the app).
+
+Differences from the canvas, on purpose: the reading-progress list shows two
+steps, not three, because the backend reports only "processing"; the QR is
+not dimmed while a photo is read, so a helper can still scan it; the spoken
+word is not bolded, because a bolder word is wider and would re-wrap the
+line as the voice moves; the offline panel has no Try again or Wi-Fi button,
+because nothing in the app can act on them yet (the TV already retries).
+
+Check on the device: the debug line's window size, that icons draw, that
+the 14 px ring and 12 px bar are visible from 3 m, first run then pairing,
+each look on both screens, Read whole letter with real audio, and every look
+with Fire TV's High Contrast Text on.
+
 ## Open bug: pairing-screen instructions overflow (changed, not verified)
 
 At 1x on the virtual device, step 2 was cut at the ScrollView's clip edge

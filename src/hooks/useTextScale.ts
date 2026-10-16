@@ -6,9 +6,6 @@ const TEXT_SCALE_KEY = 'bigprint.textScale';
 /** Text scale steps. 1 is the baseline; users who need more go up. */
 export const SCALE_STEPS = [1, 1.25, 1.5, 2];
 
-/** Generous leading: large print for low vision needs air between lines. */
-const LINE_HEIGHT_RATIO = 1.4;
-
 export type TextScale = {
   /** Current multiplier, e.g. 1.5 */
   scale: number;
@@ -16,14 +13,12 @@ export type TextScale = {
   scaleIndex: number;
   /** True once the saved preference has been read. */
   restored: boolean;
-  /** Multiply a base font size by the current scale. */
-  scaled: (size: number) => number;
   /**
-   * Font size and line height for a base size, both scaled. Use this for any
-   * text that can wrap: without an explicit lineHeight, Vega measures a
-   * wrapped string too short and clips its lower lines through the glyphs.
+   * Multiply a base font size by the current scale. Screens pass the result
+   * to `type()` from theme/layout, which adds the line height every wrapping
+   * text needs.
    */
-  typeAt: (size: number) => {fontSize: number; lineHeight: number};
+  scaled: (size: number) => number;
   /** Step the scale up (1) or down (-1) and persist it. */
   changeScale: (direction: 1 | -1) => void;
   canGoBigger: boolean;
@@ -80,17 +75,11 @@ export const useTextScale = (): TextScale => {
   );
 
   const scale = SCALE_STEPS[scaleIndex];
-  const scaled = (size: number) => Math.round(size * scale);
-
   return {
     scale,
     scaleIndex,
     restored,
-    scaled,
-    typeAt: (size: number) => {
-      const fontSize = scaled(size);
-      return {fontSize, lineHeight: Math.round(fontSize * LINE_HEIGHT_RATIO)};
-    },
+    scaled: (size: number) => Math.round(size * scale),
     changeScale,
     canGoBigger: scaleIndex < SCALE_STEPS.length - 1,
     canGoSmaller: scaleIndex > 0,

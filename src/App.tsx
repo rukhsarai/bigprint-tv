@@ -1,7 +1,9 @@
 import React, {useMemo} from 'react';
+import {View} from '@amazon-devices/react-native-kepler';
 
 import {PairingScreen} from './screens/PairingScreen';
 import {DocumentView} from './screens/DocumentView';
+import {FirstRunColours} from './screens/FirstRunColours';
 import {useIncomingDocument} from './hooks/useIncomingDocument';
 import {
   createMockDocumentService,
@@ -11,6 +13,8 @@ import {
 import type {AudioPlayer} from './services/audioPlayer';
 import {createVegaAudioPlayer} from './services/vegaAudio';
 import {CAPTURE_BASE_URL} from './config';
+import {ColoursProvider, useColours} from './theme/ColoursProvider';
+import {layout} from './theme/styles';
 
 type Props = {
   /** Injected in tests. Defaults to the real backend, or the mock when no URL is configured. */
@@ -19,7 +23,15 @@ type Props = {
   player?: AudioPlayer | null;
 };
 
-export const App = ({service, player}: Props) => {
+export const App = (props: Props) => (
+  <ColoursProvider>
+    <Screens {...props} />
+  </ColoursProvider>
+);
+
+const Screens = ({service, player}: Props) => {
+  const {restored, chosen, colours} = useColours();
+
   // Built once: a new service object each render would resubscribe endlessly.
   const documentService = useMemo(
     () =>
@@ -34,8 +46,22 @@ export const App = ({service, player}: Props) => {
     [player],
   );
 
+  // Starts pairing straight away, even during the first-run choice, so the
+  // code is ready by the time the viewer has picked a look.
   const {status, session, document, error, reset} =
     useIncomingDocument(documentService);
+
+  if (!restored) {
+    // A blank screen in the default look for the moment it takes to read
+    // the saved choice, rather than a flash of the wrong colours.
+    return (
+      <View style={[layout.fill, {backgroundColor: colours.background}]} />
+    );
+  }
+
+  if (!chosen) {
+    return <FirstRunColours />;
+  }
 
   if (status === 'arrived' && document) {
     return (
