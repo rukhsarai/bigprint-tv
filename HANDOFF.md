@@ -24,6 +24,13 @@ Last updated 16 October 2026.
 
 ## Do this first (in order)
 
+> Update, 16 Oct 13:00 UTC: steps 1 and 2 are done. The API exists
+> (`https://7y24w49ro6.execute-api.us-east-1.amazonaws.com`, id `7y24w49ro6`),
+> `src/config.ts` points at it, and the old Function URL is left in place until
+> the API is confirmed reachable from outside AWS; `python aws/deploy.py` removes
+> it. What remains is step 3: rebuild, install, pair, send a photo.
+
+
 1. Paste the current `aws/iam-policy-phase2.json` over the inline policy
    `BigPrintTvPhase2` on IAM user `bigprint-tv-dev` (it gains the
    `apigateway:*` actions). Role policies are already correct.
