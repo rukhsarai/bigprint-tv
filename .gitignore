@@ -13,9 +13,9 @@ buildinfo.json
 CMakeUserPresets.json
 npm-debug.log
 # Python pipeline
-backend/__pycache__/
+__pycache__/
+*.pyc
 backend/.venv/
-backend/*.pyc
 
 # Metro logs written by the Fast Refresh workflow
 generated/

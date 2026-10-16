@@ -1,0 +1,20 @@
+{
+  "id": "doc-1792119078-a9fb3af69ba5",
+  "kind": "Tax Invoice",
+  "sender": "XYZ CO.",
+  "keyFacts": [
+    {
+      "label": "Total",
+      "value": "27140",
+      "confidence": 93.7
+    }
+  ],
+  "lines": [
+    "This is a Tax Invoice from XYZ CO.",
+    "The total amount due is 27140.",
+    "The bank account details are provided for payment.",
+    "More items are listed in the table, but they are garbled and cannot be read."
+  ],
+  "lowConfidence": true,
+  "createdAt": 1792119091
+}

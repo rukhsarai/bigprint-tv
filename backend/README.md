@@ -18,11 +18,12 @@ TV ◀──GET /audio─────── capture Lambda                      
 | `lambda_capture.py` | The only public endpoint. Issues pairing sessions, serves the phone page, accepts one JPEG, hands results and audio to the TV. Cannot call any AI service. |
 | `capture_page.html` | The phone page. Downscales and re-encodes the photo as JPEG in the browser (this is also what makes iPhone HEIC work). |
 | `lambda_process.py` | Triggered by S3. Runs the pipeline, makes the audio, writes the result. No public endpoint. |
-| `pipeline.py` | photo → OCR with layout and tables → classify → key facts (cross-checked) → plain English → numeric guard |
+| `pipeline.py` | photo → OCR with layout and tables → classify → key facts (cross-checked) → plain English → currency guard → numeric guard |
 | `speech.py` | Polly neural voice, one MP3 per line, with word timings for the highlight |
 | `tests/` | Unit tests for the pure parts: `python -m unittest discover backend/tests` |
 | `run_batch.py` | Runs the pipeline over every photo in the bucket and prints an accuracy report |
-| `gen_fixtures.py` | Regenerates `src/data/documents.ts` from chosen photos |
+| `gen_fixtures.py` | Regenerates `src/data/documents.ts` from the saved results in `fixtures/` |
+| `fixtures/` | Four real results from public sample photos, used as app fixtures |
 
 ## Trust model
 
@@ -66,9 +67,67 @@ Tested against real photographs. Three findings drove the design:
    who cannot easily check the paper, a confidently wrong number is worse than
    no number.
 
+4. **A currency the page does not print is never spoken.** On a US receipt
+   with bare figures the rewrite came back as "31 pounds 40": the model had
+   supplied the voice's own currency. `currency_guard` now strips any currency
+   word that the OCR text does not evidence (symbol, code such as `EUR` even
+   when glued to the figure, or the word itself), so the line becomes "The
+   subtotal is 31.40", and drops a line left with a bare currency claim.
+
+5. **The anti-injection rule must not speak.** The first version told the
+   model to say "This letter contains text addressed to a computer" when the
+   page tried to instruct it. Five of twelve ordinary receipts triggered that
+   sentence (e-mail addresses and codes look like instructions to a model), so
+   the rule now says: ignore it, say nothing.
+
 Anything below 90 % confidence is dropped rather than shown, and the TV warns
 "check against the paper copy" when the whole page read below 90 % or a money
 figure was disputed.
+
+## Accuracy, measured (16 October 2026)
+
+Eleven public sample photographs from the bucket, each run through the
+*deployed* functions, then checked by eye against the picture. Four of the
+results are kept as app fixtures in `fixtures/`. "Figures" are every number
+the TV speaks: amounts, dates, times, references, phone numbers.
+
+| Photo | OCR | Key facts shown | Figures spoken | Wrong | Warning shown |
+|---|---|---|---|---|---|
+| Brewers receipt (phone photo, 340 px) | 99.5 % | 4 of 4 right | 14 | 0 | no |
+| El Chalan guest check, two copies | 98.4 % / 97.5 % | 8 of 8 right | 28 | 0 | once, wrongly (see below) |
+| Nexxt Cafe (stock-photo thumbnail, 380 px) | 94.8 % | 3 of 3 right | 13 | 1 | no |
+| McDonald's Alicante | 91.7 % | none (date cross-check failed, see below) | 9 | 0 | no |
+| Recipe on a letter | 92.2 % | none, correctly: not financial | 3 | 0 | no |
+| Tax invoice template | 76.6 % | 1 | 2 | 0 | yes |
+| Four blurry thumbnails (5–17 KB) | 60–87 % | 1 of 1 right | — | item names garbled, one subtotal does not add up | yes, every time |
+
+- **Key facts: 17 shown, 16 verified correct, 1 unverifiable (the template's
+  27140), 0 wrong.** Key facts are what a reader acts on, and they are pinned
+  on screen.
+- **Spoken figures on readable photos: 69, of which 1 wrong** (98.6 %). The
+  one is a suggested-tip line where Textract read "6.28" as "6.20" on a
+  380-pixel-wide thumbnail and was confident about it. No layer can catch a
+  confident OCR misread of a non-key figure; a photo taken with the phone's
+  camera, as the capture page insists on, is many times that resolution.
+- **Nothing wrong was shown without a warning on any blurry photo.** The
+  warning fired on all four, and on the tax-invoice template.
+- **Audio: 0 silent lines in 11 documents.** Upload to spoken result took
+  13–49 seconds; Polly's two calls per line dominate on long receipts.
+- **The photo cross-check vetoed five facts, and every veto was wrong.** Nova
+  read "3/12/2016" as "3/27/2016" and "27/02/2025" as "17-02/02/2025", and
+  once disagreed with a correct "$49.52"; Textract was right each time. So the
+  veto now applies to money only, where a second reader is worth a rare
+  hidden total, and dates and references are shown as Textract read them
+  (`values_agree` also accepts "3/12/2016" against "March 12, 2016").
+  Re-run after that change: the two hidden dates came back, both correct. The
+  money veto still fired wrongly on the 380-pixel copy (total hidden, amount
+  due kept, warning shown); it never fired on a phone-resolution photo.
+- One wrong *word*: an OCR garble "bisenits" was rewritten as "biscotti" on
+  what is a biscuit recipe. Words are the model's to smooth; only figures are
+  guarded. That is the trade the design makes, and it is stated on the TV.
+
+Re-run with `python run_batch.py` (needs the IAM user's keys) or by uploading
+to a session and reading `results/<sid>/<docId>.json`.
 
 ## Cost per document (us-east-1, October 2026)
 

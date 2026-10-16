@@ -227,3 +227,31 @@ with a silent-highlight fallback if playback errors.
 `Audio` and `AudioPlayer`, state the `initialize()` requirement next to the
 constructor, and document the custom events and the audio type enums with a
 sentence each on when to use them.
+
+## 8. S3 answers "AccessDenied" for a key that simply does not exist
+
+**Severity: Medium — cost an evening of wrong diagnosis.**
+
+**Task:** Give each Lambda role the smallest S3 policy: `GetObject` and
+`PutObject` on a few prefixes, no `ListBucket`.
+
+**Steps:** `s3.get_object` on a key that has not been written yet (a session
+code nobody has used, today's counter before the first document).
+
+**Expected:** `NoSuchKey`, as the SDK documentation for `GetObject` describes.
+
+**Actual:** `AccessDenied`, with a message blaming a missing
+`s3:ListBucket` permission. The first-run path of both functions crashed
+with a permissions error on a correct policy, which read exactly like the
+genuine policy mistake that had been made minutes earlier (an older copy of
+the file pasted onto the role), so the two were chased as one problem.
+
+**Workaround:** Both functions treat a 403 from `GetObject` as "not there",
+with a log line so a real policy error still shows. `AWS_SETUP.md` now has a
+"check the paste" step that compares `Sid` names, because the console cannot
+show which version of a file was pasted.
+
+**Suggestion:** The behaviour is documented in an S3 troubleshooting page,
+but not where a developer looks: the `GetObject` API reference and the error
+message itself. The message could say "the object may not exist; without
+s3:ListBucket, S3 cannot distinguish a missing key from a forbidden one".

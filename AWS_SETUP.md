@@ -77,11 +77,20 @@ For each of the two roles:
 
 | Role name | Policy file | What it allows |
 |---|---|---|
-| `BigPrintTvCaptureRole` | `aws/capture-role-policy.json` | sessions, write photos and a status file, read results, own logs |
-| `BigPrintTvProcessRole` | `aws/process-role-policy.json` | read photos, Textract, Nova, Polly, write results, a daily counter, own logs |
+| `BigPrintTvCaptureRole` | `aws/capture-role-policy.json` | sessions, per-address limits, write photos and a status file, read results, own logs |
+| `BigPrintTvProcessRole` | `aws/process-role-policy.json` | read photos and its own status file, Textract, Nova, Polly, write results, a daily counter, own logs |
 
 The capture role deliberately cannot call Textract, Bedrock or Polly: it is the
 only thing on the public internet.
+
+**Check the paste.** Open the role → the policy → *JSON* and compare the `Sid`
+names with the file. The capture role must list `Sessions`,
+`PerAddressLimits`, `StorePhotosAndProcessingStatus`, `ReadResults`, `OwnLogs`;
+the process role `ReadPhotos`, `WriteResults`, `ReadOwnStatus`,
+`DailyCapCounter`, `ReadDocuments`, `NovaOnly`, `Speech`, `OwnLogs`. A missing
+name means an older copy of the file was pasted; paste the current one over it.
+Policies are versioned in this repository precisely so that this check is
+possible.
 
 ---
 
@@ -110,5 +119,7 @@ one-day lifecycle rules, then prints the capture URL. Put that in
 | Phone says "This code is not in use" | the TV session expired (2 h) or the TV was restarted | go back to the pairing screen and scan again |
 | Photo accepted but TV never changes | S3 trigger or process role problem | CloudWatch → `/aws/lambda/bigprint-tv-process`; `aws/deploy.py` re-applies the trigger |
 | `Maximum policy size of 2048 bytes exceeded for user` | pasting a role policy onto the user | role policies go on the roles (Part B), not on the user |
+| `POST /session` returns 500; log says `not authorized to perform: s3:PutObject` on `ratelimit/` | the capture role holds an older policy without `PerAddressLimits` | paste `aws/capture-role-policy.json` over it (see "Check the paste") |
+| Log line `s3 get …: AccessDenied, treated as missing` | S3 answers 403, not 404, for a missing key when the caller cannot list the bucket; the functions treat that as "not there" | harmless on its own. If it appears for a key that exists, that role's policy is wrong |
 | `NoSuchBucket` / `AccessDenied` on S3 | bucket name mismatch | the name appears in every `aws/*.json` file and in `aws/deploy.py` |
 | Textract `UnsupportedDocumentException` | HEIC or WebP | the phone page converts to JPEG; `run_batch.py` skips other formats |

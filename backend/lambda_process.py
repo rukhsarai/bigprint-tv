@@ -51,11 +51,21 @@ def _put_json(key: str, data: dict, **conditions):
 
 
 def _get_json(key: str):
-    """(data, etag) or (None, None)."""
+    """(data, etag) or (None, None).
+
+    S3 answers AccessDenied rather than NoSuchKey for a missing key when the
+    caller lacks s3:ListBucket. These roles deliberately cannot list the
+    bucket, so a 403 here almost always means "not there". It is logged, so a
+    genuinely wrong policy still shows up in the function's logs.
+    """
     try:
         obj = s3.get_object(Bucket=BUCKET, Key=key)
     except ClientError as e:
-        if e.response["Error"]["Code"] in ("NoSuchKey", "404"):
+        code = e.response["Error"]["Code"]
+        if code in ("NoSuchKey", "404"):
+            return None, None
+        if code in ("AccessDenied", "403"):
+            print(f"s3 get {key.split('/')[0]}/...: AccessDenied, treated as missing")
             return None, None
         raise
     return json.loads(obj["Body"].read()), obj.get("ETag")
@@ -150,7 +160,7 @@ def process(sid: str, upload_id: str, key: str):
         "event": "processed", "docId": doc_id, "seconds": round(time.time() - started, 1),
         "ocrConfidence": d.get("ocrConfidence"), "ocrFeature": d.get("ocrFeature"),
         "lines": len(doc.lines), "silentLines": sum(1 for s in speech if s is None),
-        "facts": d.get("factsFound"), "disputed": len(d.get("factsDisputed") or []),
+        "facts": d.get("factsFound"), "disputed": [x.get("field") for x in d.get("factsDisputed") or []],
         "dropped": d.get("linesDroppedByGuard"), "lowConfidence": doc.lowConfidence,
     }))
 

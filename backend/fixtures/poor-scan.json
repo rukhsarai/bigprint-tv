@@ -1,0 +1,34 @@
+{
+  "id": "doc-1792119066-129c812a47b3",
+  "kind": "Receipt",
+  "keyFacts": [
+    {
+      "label": "Total",
+      "value": "$116.37",
+      "confidence": 100
+    }
+  ],
+  "lines": [
+    "This is a receipt from Drder ESCATE.",
+    "The subtotal is 100 dollars 50 cents.",
+    "The tax is 1 dollar 87 cents.",
+    "The total is 116 dollars 37 cents.",
+    "The order balance due is 116 dollars 37 cents.",
+    "On 2/19/18, you ordered 1/185 for 5 dollars.",
+    "You ordered I for 3 dollars 50 cents.",
+    "You ordered trass! serouts for 7 dollars 25 cents.",
+    "You ordered Floot orange and for 7 dollars.",
+    "You ordered Stone N for 1 dollar.",
+    "You ordered any City 11 to PUB for 7 dollars.",
+    "You ordered grilled theere for 1 dollar.",
+    "You ordered 1 taxe for 4 dollars 50 cents.",
+    "You ordered tawntos for 6 dollars 25 cents.",
+    "You ordered a blank item for 15 dollars.",
+    "You ordered Stuffed Shells for 14 dollars.",
+    "You ordered a blank item for 70 dollars.",
+    "You ordered chaffie for 10 dollars.",
+    "More items are listed."
+  ],
+  "lowConfidence": true,
+  "createdAt": 1792119114
+}

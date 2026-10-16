@@ -256,3 +256,61 @@ class PromptSafetyTest(unittest.TestCase):
     def test_table_markers_and_brackets_are_never_spoken(self):
         self.assertFalse(_is_speakable("Product: Diesel | Qty: 8"))
         self.assertFalse(_is_speakable("[End of table] now"))
+
+
+class CurrencyGuardTest(unittest.TestCase):
+    """A currency the page does not show is never spoken."""
+
+    OCR = ["NEXXT CAFE", "Sub Total: 31.40", "Tax: 2.83", "TOTAL: 34.23", "GRATUITY 20 6.28"]
+
+    def test_unshown_currency_is_stripped_to_the_figure(self):
+        from pipeline import currency_guard
+        self.assertEqual(
+            currency_guard(["The subtotal is 31 pounds 40.", "The total amount due is 118 pounds."], self.OCR),
+            ["The subtotal is 31.40.", "The total amount due is 118."],
+        )
+
+    def test_shown_currency_is_kept(self):
+        from pipeline import currency_guard
+        self.assertEqual(currency_guard(["The total is 44 pounds 76."], ["Total £44.76"]), ["The total is 44 pounds 76."])
+        self.assertEqual(currency_guard(["The total is 1.80 euros."], ["TOTAL 1,80 €"]), ["The total is 1.80 euros."])
+        self.assertEqual(currency_guard(["It costs $5.00."], ["$5.00"]), ["It costs $5.00."])
+        # A code glued to the figure, as receipts print it, still counts as evidence.
+        self.assertEqual(currency_guard(["The VAT is 10% of 1.64 euros."], ["10.00% de 1.64EUR = 0.16"]),
+                         ["The VAT is 10% of 1.64 euros."])
+        # Letters around the code are not the code.
+        self.assertEqual(currency_guard(["The fee is 3 euros."], ["NEUROLOGY 3"]), ["The fee is 3."])
+
+    def test_bare_currency_claim_is_dropped(self):
+        from pipeline import currency_guard
+        self.assertEqual(currency_guard(["The amounts are in dollars."], self.OCR), [])
+
+    def test_stripped_figure_still_passes_the_numeric_guard(self):
+        from pipeline import currency_guard, numeric_guard
+        lines = currency_guard(["The subtotal is 31 pounds 40."], self.OCR)
+        self.assertEqual(numeric_guard(lines, self.OCR), ["The subtotal is 31.40."])
+
+
+class PromptRulesTest(unittest.TestCase):
+    def test_injection_rule_does_not_add_a_spoken_warning(self):
+        from pipeline import UNTRUSTED_RULE
+        self.assertNotIn("include the line", UNTRUSTED_RULE)
+        self.assertIn("do not comment on it", UNTRUSTED_RULE)
+
+    def test_rewrite_prompt_forbids_invented_currency(self):
+        from pipeline import rewrite_prompt
+        system, _ = rewrite_prompt(["TOTAL 34.23"], "Receipt")
+        self.assertIn("ONLY when its symbol or name is printed", system)
+
+
+class AmbiguousDateTest(unittest.TestCase):
+    def test_same_digits_in_the_other_order_agree(self):
+        from pipeline import values_agree
+        self.assertTrue(values_agree("3/12/2016", "March 12, 2016", "date"))
+        self.assertTrue(values_agree("3/12/2016", "3 December 2016", "date"))
+        self.assertTrue(values_agree("27/02/2025 13:17:32", "27/02/2025", "date"))
+
+    def test_different_dates_still_disagree(self):
+        from pipeline import values_agree
+        self.assertFalse(values_agree("3/12/2016", "3/11/2016", "date"))
+        self.assertFalse(values_agree("13/12/2016", "12/13/2017", "date"))

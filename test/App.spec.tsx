@@ -9,7 +9,7 @@ import {
   createFailingDocumentService,
   type DocumentListener,
 } from '../src/services/documentService';
-import {sampleCertificate} from '../src/data/documents';
+import {sampleLetter} from '../src/data/documents';
 
 /** Waits for the saved-text-size lookup to finish so React state is settled. */
 const settled = () =>
@@ -81,10 +81,10 @@ describe('App', () => {
 
   it('switches to the document when one arrives', async () => {
     render(
-      <App service={createMockDocumentService(sampleCertificate, 10)} player={null} />,
+      <App service={createMockDocumentService(sampleLetter, 10)} player={null} />,
     );
     await waitFor(() =>
-      expect(screen.getByText(sampleCertificate.kind)).toBeTruthy(),
+      expect(screen.getByText(sampleLetter.kind)).toBeTruthy(),
     );
     // The pairing screen is gone once the document is on screen.
     expect(screen.queryByTestId('pairing-waiting')).toBeNull();

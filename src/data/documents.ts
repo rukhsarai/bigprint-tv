@@ -1,11 +1,13 @@
 /**
- * Real documents, produced by running backend/pipeline.py over photographs
- * in the bigprint-tv-dev-ru22 bucket. Regenerate with:
+ * Real documents, produced by the deployed backend (Textract + Nova + the
+ * numeric and currency guards) from public sample receipts and letters. The
+ * raw results live in backend/fixtures/; regenerate this file with:
  *
- *     cd backend && python gen_fixtures.py ../src/data/documents.ts
+ *     python backend/gen_fixtures.py
  *
- * These are genuine Textract + Nova output, not hand-written examples, so the
- * app is exercised against the messiness of real OCR.
+ * They are genuine pipeline output, not hand-written examples, so the app is
+ * exercised against the messiness of real OCR. Nothing here came from
+ * anyone's private post.
  */
 
 import type {SpeechMark} from './speechMarks';
@@ -46,144 +48,104 @@ export type ScannedDocument = {
   speech?: LineSpeech[];
 };
 
-/** financial, key facts present. OCR 96.5%, financial=true. */
+/** financial, every figure cross-checked. */
 export const sampleReceipt: ScannedDocument = {
-  id: "sampleReceipt",
+  id: "doc-1792119062-7c5592cdb1fb",
   kind: "Receipt",
-  sender: "AMIN FILLING STATION",
+  sender: "Brewers Restaurant and Sports Bar",
   keyFacts: [
-    {label: "Date", value: "20-11-25", confidence: 99.9},
-    {label: "Reference", value: "21081", confidence: 96.7},
-    {label: "Phone", value: "0313-5715779", confidence: 100.0},
+    {label: "Total", value: "26.91", confidence: 100},
+    {label: "Date", value: "3/17/2017", confidence: 100},
+    {label: "Reference", value: "834-5", confidence: 100},
+    {label: "Phone", value: "928-783-0073", confidence: 99.6},
   ],
   lines: [
-    "This is a receipt from Amin Filling Station.",
-    "The station is located on Swabi Mardan Road, near Ismaila Interchange in Swabi.",
-    "You can reach them at 0313-5715779 or 0300-9088376.",
-    "The vehicle number is 4082.",
-    "The transaction number is 21081.",
-    "The date of the transaction is 20-11-25.",
-    "The first product purchased is petrol, with a rate of 267.",
-    "The amount for petrol is 7700.",
-    "The next product is diesel, with a rate of 28.",
-    "The amount for diesel is 8.",
-    "The next product is HOBS, with a rate of 36.",
-    "The amount for HOBS is 1.",
-    "The next product is mobile oil, with a rate of 1.",
-    "The amount for mobile oil is 1.",
-    "The next product is break oil, with a rate of 1.",
-    "The amount for break oil is 1.",
-    "The next product is filter, with a rate of 1.",
-    "The amount for filter is 1.",
-    "The next product is S.T.P, with a rate of 1.",
-    "The amount for S.T.P is 1.",
-    "The next product is car wash, with a rate of 1.",
-    "The amount for car wash is 1.",
-    "The next product is tyre shop, with a rate of 1.",
-    "The amount for tyre shop is 1.",
-    "The total amount is 1.",
-    "Please sign here to confirm the transaction.",
+    "This is a receipt from Brewers Restaurant and Sports Bar.",
+    "The total amount to pay is 26.91.",
+    "The order number is 834-5.",
+    "The table number is 315.",
+    "The server was Steve A.",
+    "The date of the order is March 17, 2017.",
+    "The time of the order is 1:13 PM.",
+    "One BLT Sandwich costs 8.99.",
+    "Tater Tots cost 0.99.",
+    "One Corned Beef Tacos cost 7.99.",
+    "One Side Fries cost 2.99.",
+    "The subtotal is 20.96.",
+    "The tax is 2.18.",
+    "The 18% gratuity is 3.77.",
+    "More items are listed on the receipt.",
   ],
   lowConfidence: false,
 };
 
-/** non-financial, numbers that must NOT be read as money. OCR 91.2%, financial=false. */
-export const sampleCertificate: ScannedDocument = {
-  id: "sampleCertificate",
-  kind: "Provisional Detailed Marks Certificate",
-  sender: "ABDUL WALI KHAN UNIVERSITY MARDAN, DEPARTMENT OF COMPUTER SCIENCE",
+/** non-financial, numbers that must NOT be read as money. */
+export const sampleLetter: ScannedDocument = {
+  id: "doc-1792119069-128e4de31004",
+  kind: "Recipe for biscotti",
   keyFacts: [
   ],
   lines: [
-    "Abdul Wali Khan University Mardan, Department of Computer Science.",
-    "Provisional detailed marks certificate for Rukhsar, daughter of Bakhtaj.",
-    "Roll number 59, Fall semester 2021.",
-    "Islamic Studies: 85 out of 100, grade point 3.75.",
-    "Principal of Psychology: 84 out of 100, grade point 3.7.",
-    "Basic Mathematics: 56 out of 100, grade point 2.3.",
-    "Introduction to Biochemistry: 85 out of 100, grade point 3.75.",
-    "English Composition & Comprehension: 72 out of 100, grade point 3.1.",
-    "Total for Fall 2021: 382 out of 500, GPA 3.32.",
-    "Spring 2022 semester.",
-    "Introduction to Computing: 70 out of 100, grade point 3.",
-    "Pakistan Studies: 72 out of 100, grade point 3.1.",
-    "Programming Fundamental: 90 out of 100, grade point 4.",
-    "Islamic History: 83 out of 100, grade point 3.65.",
-    "Communication Skills: 70 out of 100, grade point 3.",
-    "Total for Spring 2022: 385 out of 500, GPA 3.35.",
-    "Fall 2022 semester.",
-    "Object Oriented Programming: 86 out of 100, grade point 3.8.",
-    "GE-Social Sciences-II/ Calculus-I: 66 out of 100, grade point 2.8.",
-    "Intro to Networks: 80 out of 100, grade point 3.5.",
-    "GE-Natural Science-II/ Discrete Structure: 80 out of 100, grade point 3.5.",
-    "Technical writing: 80 out of 100, grade point 3.3.",
-    "Total for Fall 2022: 392 out of 500, GPA 3.44.",
-    "Spring 2023 semester.",
-    "Operating System: 70 out of 100, grade point 3.",
-    "Research Methods: 78 out of 100, grade point 3.4.",
-    "Introduction to Philosophy: 80 out of 100, grade point 3.5.",
-    "Database System: 80 out of 100, grade point 3.5.",
-    "Introduction to Physics: 77 out of 100, grade point 3.35.",
-    "Data Structure: 80 out of 100, grade point 3.5.",
-    "Total for Spring 2023: 465 out of 600, GPA 3.38.",
-    "Overall percentage: 77.33, CGPA 3.37.",
-    "Errors and omissions are subject to subsequent rectification.",
-    "Note: This DMC is for Openlab Summer Student Programme Scholarship only.",
-    "Prepared by Mr. Farman Ullah, checked by Mr. Shahzad Alam.",
-    "Transcript issued on 25th January 2024.",
-    "Chairman, Controller of Examination, Department of Computer Science, Abdul Wali Khan University Mardan.",
+    "This is a recipe for biscotti.",
+    "Knead the milk into the flour mix until dough forms.",
+    "Add milk if necessary.",
+    "Put dough on a lightly floured surface.",
+    "Knead the dough 7 or 8 times.",
+    "Do not overwork the dough.",
+    "Roll the dough to the desired thickness.",
+    "Cut biscotti out with a cookie cutter or canning ring.",
+    "Cooking times vary by thickness and oven, 14 to 20 minutes.",
+    "The most important ingredient is love.",
   ],
   lowConfidence: false,
 };
 
-/** dense page, no sender figures. OCR 97.3%, financial=false. */
-export const sampleSchedule: ScannedDocument = {
-  id: "sampleSchedule",
-  kind: "Event schedule for a conference",
-  sender: "UN Women",
+/** dense page with a table, flagged low confidence. */
+export const sampleInvoice: ScannedDocument = {
+  id: "doc-1792119078-a9fb3af69ba5",
+  kind: "Tax Invoice",
+  sender: "XYZ CO.",
   keyFacts: [
+    {label: "Total", value: "27140", confidence: 93.7},
   ],
   lines: [
-    "Welcome to the Women Digital Empowerment Conference.",
-    "The event is scheduled for the 20th of November, 2025.",
-    "On the second day, there will be a session on action and innovation.",
-    "At 9:00 AM, there will be a registration for participant check-in and welcome.",
-    "At 9:30 AM, the opening will feature informal networking among students, startups, and industry guests.",
-    "At 9:45 AM, there will be a presentation showcasing digitalization initiatives by students from various universities.",
-    "At 11:30 AM, there will be an idea exchange with interactive sessions with MSMEs and mentors.",
-    "At 2:00 PM, there will be a networking lunch for informal networking.",
-    "The event is organized by UN Women, CR, KOICA, CD, and DCR.",
-    "The speakers include Zoha Waqas, Co-founder of playeuneure LUMS, Lahore, and Ayesha Mukhtar, Solar Panel and Energy Solutions, Multan.",
-    "The event is supported by SMEDA, Karandaaz, Accelerate Prosperity, TIE, Karavan C, Jazz, Telenor, and Easypaisa i2i.",
-    "The event is hosted by UN Women KP and Punjab Offices.",
-  ],
-  lowConfidence: false,
-};
-
-/** 61.8% OCR — the low-confidence path. OCR 61.8%, financial=true. */
-export const samplePoorScan: ScannedDocument = {
-  id: "samplePoorScan",
-  kind: "Invoice",
-  sender: "ROBERTSON",
-  keyFacts: [
-  ],
-  lines: [
-    "Invoice number DGPR06 145.",
-    "Ship to Rukhsai Bro Ahmad Taj.",
-    "Customer order number Shanbaz Gami Mardan Zie Photostate Shop GGPP25032806189.",
-    "Address is Mardan 23200.",
-    "Attention to ROBERTSON Shm Prom.",
-    "Attention 63R.",
-    "Total amount due is CMPOOUT.",
-    "Ship via outside system.",
-    "Order quantity is 10, SKU is GOCPGAEB300813, item is IGG BK SM Scholar Tee.",
-    "Order quantity is 10, SKU is GGCPGC 80205999, item is (GG.BN) TOPS 2020 Person Pough.",
-    "Order quantity is 3, SKU is GOCPGBPH167899, item is GG/GNI Google Duffer Bag Green.",
-    "Order quantity is 3, SKU is 000PG0CQ185798, item is GG WT Google Hardcover Journal White.",
-    "Order quantity is 1, SKU is 3GCPG0AJ206099, item is IGG GRI TOPS 2020 Pen.",
-    "There are 3 more items listed.",
+    "This is a Tax Invoice from XYZ CO.",
+    "The total amount due is 27140.",
+    "The bank account details are provided for payment.",
+    "More items are listed in the table, but they are garbled and cannot be read.",
   ],
   lowConfidence: true,
 };
 
-export const sampleDocuments: ScannedDocument[] = [sampleReceipt, sampleCertificate, sampleSchedule, samplePoorScan];
+/** tiny blurry photo, the low-confidence path. */
+export const samplePoorScan: ScannedDocument = {
+  id: "doc-1792119066-129c812a47b3",
+  kind: "Receipt",
+  keyFacts: [
+    {label: "Total", value: "$116.37", confidence: 100},
+  ],
+  lines: [
+    "This is a receipt from Drder ESCATE.",
+    "The subtotal is 100 dollars 50 cents.",
+    "The tax is 1 dollar 87 cents.",
+    "The total is 116 dollars 37 cents.",
+    "The order balance due is 116 dollars 37 cents.",
+    "On 2/19/18, you ordered 1/185 for 5 dollars.",
+    "You ordered I for 3 dollars 50 cents.",
+    "You ordered trass! serouts for 7 dollars 25 cents.",
+    "You ordered Floot orange and for 7 dollars.",
+    "You ordered Stone N for 1 dollar.",
+    "You ordered any City 11 to PUB for 7 dollars.",
+    "You ordered grilled theere for 1 dollar.",
+    "You ordered 1 taxe for 4 dollars 50 cents.",
+    "You ordered tawntos for 6 dollars 25 cents.",
+    "You ordered a blank item for 15 dollars.",
+    "You ordered Stuffed Shells for 14 dollars.",
+    "You ordered a blank item for 70 dollars.",
+    "You ordered chaffie for 10 dollars.",
+    "More items are listed.",
+  ],
+  lowConfidence: true,
+};
+
+export const sampleDocuments: ScannedDocument[] = [sampleReceipt, sampleLetter, sampleInvoice, samplePoorScan];

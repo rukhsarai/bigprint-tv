@@ -5,7 +5,7 @@ import {useIncomingDocument} from '../src/hooks/useIncomingDocument';
 import type {AudioPlayer, PlaybackHandlers} from '../src/services/audioPlayer';
 import {createMediaElementPlayer, type MediaElementLike} from '../src/services/audioPlayer';
 import type {DocumentListener} from '../src/services/documentService';
-import {sampleReceipt, sampleSchedule} from '../src/data/documents';
+import {sampleReceipt, sampleInvoice} from '../src/data/documents';
 
 const marks = [
   {time: 0, type: 'word' as const, start: 0, end: 3, value: 'Pay'},
@@ -187,14 +187,14 @@ describe('useIncomingDocument', () => {
     expect(result.current.document).toBe(sampleReceipt);
 
     // A second page arrives while reading: the view must not change underneath them.
-    act(() => l!.onDocument(sampleSchedule));
+    act(() => l!.onDocument(sampleInvoice));
     act(() => l!.onError('ignored while reading'));
     expect(result.current.document).toBe(sampleReceipt);
     expect(result.current.error).toBeNull();
 
     act(() => result.current.reset());
     expect(result.current.status).toBe('arrived');
-    expect(result.current.document).toBe(sampleSchedule);
+    expect(result.current.document).toBe(sampleInvoice);
 
     act(() => result.current.reset());
     expect(result.current.status).toBe('waiting');
