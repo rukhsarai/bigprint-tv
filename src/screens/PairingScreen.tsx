@@ -38,7 +38,7 @@ const STATUS_TEXT: Record<IncomingStatus, string> = {
 };
 
 export const PairingScreen = ({status, session, error}: Props) => {
-  const {scale, scaled, restored, changeScale, canGoBigger, canGoSmaller} =
+  const {scale, typeAt, restored, changeScale, canGoBigger, canGoSmaller} =
     useTextScale();
   const spokenCode = session ? session.code.split('').join(' ') : '';
 
@@ -52,23 +52,26 @@ export const PairingScreen = ({status, session, error}: Props) => {
         'Text size controls are at the bottom left.'
       }>
       <View style={styles.left}>
-        {/* Scrolls so the largest text sizes stay reachable instead of clipping. */}
+        {/* The instructions are kept short and the title compact so all three
+            steps fit above the controls at 1x and 1.25x. At the largest sizes
+            they scroll, with the indicator shown so a cut-off line reads as
+            "more below" rather than as a rendering fault. */}
         <ScrollView
           style={styles.textScroll}
           contentContainerStyle={styles.textScrollContent}
-          showsVerticalScrollIndicator={false}>
-          <Text role="heading" style={[styles.title, {fontSize: scaled(44)}]}>
+          showsVerticalScrollIndicator={true}>
+          <Text role="heading" style={[styles.title, typeAt(40)]}>
             Read anything on your TV
           </Text>
 
-          <Text style={[styles.body, {fontSize: scaled(24)}]}>
-            1. Point a phone camera at the square on the right
+          <Text style={[styles.body, typeAt(24)]}>
+            1. Point a phone at the square on the right
           </Text>
-          <Text style={[styles.body, {fontSize: scaled(24)}]}>
-            2. Tap the link that pops up, then photograph the letter
+          <Text style={[styles.body, typeAt(24)]}>
+            2. Tap the link, then photograph the letter
           </Text>
-          <Text style={[styles.body, {fontSize: scaled(24)}]}>
-            3. It appears here in large print, and can be read aloud
+          <Text style={[styles.body, typeAt(24)]}>
+            3. It appears here and can be read aloud
           </Text>
         </ScrollView>
 
@@ -79,7 +82,7 @@ export const PairingScreen = ({status, session, error}: Props) => {
           {status === 'error' && error ? (
             <Text
               role="alert"
-              style={[styles.error, {fontSize: scaled(24)}]}
+              style={[styles.error, typeAt(24)]}
               testID="pairing-error">
               {error}
             </Text>
@@ -88,7 +91,7 @@ export const PairingScreen = ({status, session, error}: Props) => {
               // Spoken whenever it changes, so a blind user hears "waiting"
               // (time to ask for a scan) and "reading" without moving focus.
               aria-live="polite"
-              style={[styles.waiting, {fontSize: scaled(24)}]}
+              style={[styles.waiting, typeAt(24)]}
               testID={`pairing-${status}`}>
               {STATUS_TEXT[status]}
             </Text>
@@ -222,11 +225,11 @@ const styles = StyleSheet.create({
   title: {
     color: '#FFFFFF',
     fontWeight: '700',
-    marginBottom: 32,
+    marginBottom: 16,
   },
   body: {
     color: '#FFFFFF',
-    marginBottom: 12,
+    marginBottom: 8,
   },
   // Fixed sizes: this block must fit beside the QR at every text scale.
   codeLabel: {

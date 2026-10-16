@@ -36,6 +36,47 @@ id = "/com.amazon.kepler.kepler_media_controls_1@IKeplerMediaControls_0"
 [[needs.module]]
 id = "/com.amazon.kepler.keplermediadescriptor_1@IKeplermediadescriptor_1"
 
+# Services the W3C media AudioPlayer connects to at runtime. Without these the
+# device refuses the IPC connection ("unauthorized access: missing
+# [[wants.service]] manifest declaration") and read-aloud is silent, with
+# nothing in the app log but "MediaPlayer: pause". Verified on the virtual
+# device on 16 Oct 2026. Note that com.amazon.audio.system is required even
+# though the media-player setup guide lists only audio.stream and
+# audio.control: the device log names it explicitly, and declaring the other
+# two alone still fails.
+[wants]
+[[wants.service]]
+id = "com.amazon.media.server"
+
+[[wants.service]]
+id = "com.amazon.media.playersession.service"
+
+[[wants.service]]
+id = "com.amazon.mediabuffer.service"
+
+[[wants.service]]
+id = "com.amazon.mediatransform.service"
+
+[[wants.service]]
+id = "com.amazon.mediametrics.service"
+
+[[wants.service]]
+id = "com.amazon.audio.stream"
+
+[[wants.service]]
+id = "com.amazon.audio.control"
+
+[[wants.service]]
+id = "com.amazon.audio.system"
+
+[[wants.service]]
+id = "com.amazon.gipc.uuid.*"
+
+# The media pipeline talks back to the app over a per-app UUID service.
+[offers]
+[[offers.service]]
+id = "com.amazon.gipc.uuid.*"
+
 
 
 

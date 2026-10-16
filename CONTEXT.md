@@ -171,7 +171,7 @@ test/mocks/w3cmedia.js         Jest stand-in for the native media package
 | Bucket | `bigprint-tv-dev-ru22` (Block Public Access ON) |
 | IAM user | `bigprint-tv-dev`, policies `BigPrintTvPhase1` + `BigPrintTvPhase2` |
 | Roles | `BigPrintTvCaptureRole`, `BigPrintTvProcessRole` |
-| Functions | `bigprint-tv-capture` (Function URL, AuthType NONE), `bigprint-tv-process` |
+| Functions | `bigprint-tv-capture` (behind API Gateway HTTP API `7y24w49ro6`), `bigprint-tv-process` |
 
 Setup steps and troubleshooting: `AWS_SETUP.md`. Architecture, trust model and
 cost: `backend/README.md`.

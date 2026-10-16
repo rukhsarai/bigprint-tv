@@ -27,7 +27,7 @@ type Props = {
 };
 
 export const DocumentView = ({document, player, audioUrl, onBack}: Props) => {
-  const {scale, scaled, changeScale, canGoBigger, canGoSmaller} =
+  const {scale, typeAt, changeScale, canGoBigger, canGoSmaller} =
     useTextScale();
   const {readingLine, wordIndex, marks, toggle, stop} = useReadAloud(player);
 
@@ -70,11 +70,11 @@ export const DocumentView = ({document, player, audioUrl, onBack}: Props) => {
         'Text size controls are at the bottom.'
       }>
       <View style={styles.header}>
-        <Text role="heading" style={[styles.kind, {fontSize: scaled(32)}]}>
+        <Text role="heading" style={[styles.kind, typeAt(32)]}>
           {document.kind}
         </Text>
         {document.sender && (
-          <Text style={[styles.sender, {fontSize: scaled(22)}]}>
+          <Text style={[styles.sender, typeAt(22)]}>
             from {document.sender}
           </Text>
         )}
@@ -114,7 +114,7 @@ export const DocumentView = ({document, player, audioUrl, onBack}: Props) => {
             <DocumentLine
               key={index}
               text={line}
-              fontSize={scaled(30)}
+              type={typeAt(30)}
               isSpoken={readingLine === index}
               marks={readingLine === index ? marks : []}
               wordIndex={readingLine === index ? wordIndex : -1}
@@ -147,7 +147,7 @@ export const DocumentView = ({document, player, audioUrl, onBack}: Props) => {
 
 type DocumentLineProps = {
   text: string;
-  fontSize: number;
+  type: {fontSize: number; lineHeight: number};
   isSpoken: boolean;
   marks: SpeechMark[];
   wordIndex: number;
@@ -165,7 +165,7 @@ type DocumentLineProps = {
  */
 const DocumentLine = ({
   text,
-  fontSize,
+  type,
   isSpoken,
   marks,
   wordIndex,
@@ -193,12 +193,7 @@ const DocumentLine = ({
         focused && styles.lineFocused,
         isSpoken && styles.lineSpoken,
       ]}>
-      <Text
-        style={[
-          styles.lineText,
-          {fontSize, lineHeight: Math.round(fontSize * 1.4)},
-          focused && styles.lineTextFocused,
-        ]}>
+      <Text style={[styles.lineText, type, focused && styles.lineTextFocused]}>
         {isSpoken && marks.length > 0
           ? renderWithSpokenWord(text, marks, wordIndex, focused)
           : text}

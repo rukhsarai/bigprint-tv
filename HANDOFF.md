@@ -2,61 +2,82 @@
 
 Read this first. Branch `claude/upbeat-rubin-ad0wgg`, draft PR
 [rukhsarai/bigprint-tv#1](https://github.com/rukhsarai/bigprint-tv/pull/1).
-Last updated 16 October 2026.
+Last updated 16 October 2026 (afternoon, after the first on-device run
+against the live backend).
 
 ## Where things stand
 
-- **App:** builds, installs and launches on the x86_64 Vega virtual device
-  (cold launch under 1 s), D-pad works, text size persists, the whole pairing →
-  processing → document flow runs against the built-in mock. 50 Jest tests,
-  `tsc` and lint clean.
+- **End to end works on the virtual device.** Pairing → phone photo → OCR →
+  document on screen → read-aloud, all against the live backend at
+  `https://7y24w49ro6.execute-api.us-east-1.amazonaws.com` (API Gateway HTTP
+  API `7y24w49ro6` in front of `bigprint-tv-capture`). Upload to document on
+  screen took about 8 s. Two real phone photos were read correctly, with the
+  low-confidence banner shown where it should be.
+- **App:** release build 2.5 MB, cold launch 874 ms, D-pad works, text size
+  persists (1x and 1.25x observed). Jest, `tsc` and lint clean.
 - **Backend:** two Lambdas (`bigprint-tv-capture`, `bigprint-tv-process`) and
-  bucket `bigprint-tv-dev-ru22` in us-east-1 are deployed and work end to end
-  when invoked directly: 11 sample photos read, 17 key facts, 0 wrong.
-  Details in `backend/README.md`.
-- **Blocker:** the capture function's public Function URL answers
-  `403 AccessDeniedException` to every anonymous caller although it is
-  configured exactly as AWS documents (checked live: `AuthType NONE`, policy
-  statement present). The control refusing it sits above the function and the
-  deploy user cannot see it. **Fix is written, not yet applied:** `aws/deploy.py`
-  now puts an API Gateway HTTP API in front of the function (same event
-  format, no public policy needed on the function).
+  bucket `bigprint-tv-dev-ru22` in us-east-1. Accuracy on samples: 11 photos
+  read, 17 key facts, 0 wrong. Details in `backend/README.md`.
+- **No open blocker.** The earlier Function URL 403 is history: the old URL
+  and its public statement are deleted, and the API answers `GET /health`
+  with 200 from outside AWS. No account-level guardrail investigation is
+  needed.
 
-## Do this first (in order)
+## Corrections to earlier notes (read before trusting older claims)
 
-> Update, 16 Oct 13:35 UTC: steps 1 and 2 are done and verified. The API
-> `https://7y24w49ro6.execute-api.us-east-1.amazonaws.com` (id `7y24w49ro6`)
-> answers `GET /health` with 200 from a laptop outside AWS; `src/config.ts`
-> points at it; the old Function URL and its public statement are deleted.
-> What remains is step 3: rebuild, install, pair, send a photo.
+- An earlier version of this file said read-aloud audio "cannot be done on
+  the virtual device" (IPC error -41). **Wrong.** The device plays audio
+  fine; the app was being refused because `manifest.toml` declared no
+  `[wants]` services. The error was `unauthorized access: missing
+  [[wants.service]] manifest declaration, service = com.amazon.audio.system`.
+  The manifest now declares the media and audio services (and `[offers]`
+  `com.amazon.gipc.uuid.*`), and playback was verified from the media
+  pipeline's events: `waiting → canplay → playing → ended`, about 7 s for a
+  seven-line document. The non-obvious part: `com.amazon.audio.system` is
+  required even though the media-player setup guide lists only
+  `audio.stream` and `audio.control`; declaring those two alone still fails.
+- The old `-41` conclusion was generalised from `UISoundManager` (UI click
+  sounds) failing. That is a different route from read-aloud; do not infer
+  one from the other.
+- Audio was verified from pipeline events, not by ear. Word-highlight sync
+  with the voice is still unconfirmed (see "Still unverified").
 
+## Fixed on device, 16 Oct afternoon
 
-1. Paste the current `aws/iam-policy-phase2.json` over the inline policy
-   `BigPrintTvPhase2` on IAM user `bigprint-tv-dev` (it gains the
-   `apigateway:*` actions). Role policies are already correct.
-2. Run `python aws/deploy.py --write-config` (needs boto3 and that user's
-   keys; or do the same calls through the AWS connector: `apigatewayv2
-   CreateApi` quick-create with `Target` = capture function ARN, `UpdateStage`
-   throttling, `lambda AddPermission` for `apigateway.amazonaws.com`, delete
-   the old Function URL). It ends with an anonymous `GET /health`; it must
-   print 200. If it prints 403 too, the account refuses public endpoints of
-   any kind: ask the AWS organisation administrator.
-3. Commit the new `src/config.ts` (`CAPTURE_BASE_URL` = the API endpoint,
-   no trailing slash), rebuild, install on the device, pair with a phone, send
-   a photo. Expected: document on screen within 15–50 s.
+- **Read-aloud silent**: `[wants]` / `[offers]` added to `manifest.toml`.
+  Verified, see above.
+- **Wrapped text clipped mid-glyph**: every scaled `Text` set `fontSize`
+  without `lineHeight`, so a wrapped string measured too short and its lower
+  lines were clipped through the glyphs. The one exception, the document
+  line, was the only text that rendered correctly. `useTextScale` now has
+  `typeAt(size)` returning `{fontSize, lineHeight}` (ratio 1.4) and every
+  scaled text on both screens uses it.
+- **Pairing-screen instructions overflowed** at 1x: step 2 was cut at the
+  ScrollView's clip edge with the status line drawn over it, and step 3 was
+  out of view. Taller line boxes from the fix above made it marginally
+  worse. Applied the cheap options from the test report: title 44 → 40 with
+  a 16 px margin, instruction copy shortened, spacing tightened, and the
+  scroll indicator shown so any remaining overflow at 1.5x/2x reads as
+  "more below". **Not yet seen on a device**; re-check at every size. If it
+  still overflows at 1x, the remaining option is to give the instruction
+  block a fixed share of the column, which is poor for this audience, so
+  prefer shortening copy further.
 
-## Then, on real hardware (cannot be done on the virtual device)
+## Still unverified
 
-- **Read-aloud audio.** The virtual device cannot bind
-  `com.amazon.audio.*` (IPC error -41). On a Fire TV check: sound plays,
-  word highlight follows the voice, Play/Pause and Back behave, the silent
-  fallback appears only if audio fails. Code: `src/services/vegaAudio.ts`,
-  `src/services/audioPlayer.ts`, `src/hooks/useReadAloud.ts`.
+- Real Fire TV hardware. Everything above is the x86_64 virtual device;
+  `vega device list` never showed a physical device.
+- Audible confirmation and word-highlight sync with the voice.
+- Remote Back key on a physical remote: Back on a document returns to the
+  pairing screen, Back on the pairing screen exits, and nothing else exits.
 - **VoiceView** (Fire TV screen reader) against both screens.
-- **QR scan** from a sofa at 1080p (300 px code), and the phone page on an
-  iPhone (HEIC → JPEG happens in Safari via canvas).
-- Text sizes 1x–2x on a real panel; D-pad focus order; Back never exits
-  unexpectedly.
+- The phone page on an iPhone (HEIC → JPEG happens in Safari via canvas). The
+  session's photos came from a phone whose model and browser were not
+  recorded.
+- **QR scan** from a sofa at 1080p (300 px code).
+- Text sizes 1.5x and 2x on a device; only 1x and 1.25x were observed, and
+  the pairing-screen layout fix above should be re-checked at both.
+- D-pad focus order on a real panel.
 
 ## Device-readiness review (16 Oct, 26 agents, every finding adversarially verified)
 
@@ -89,8 +110,9 @@ Fixed in this branch, all covered by Jest, none yet seen on hardware:
   `accessibilityState.disabled` instead.
 - `manifest.toml`: the two autolinked media modules are declared; the
   privilege `com.amazon.system.audio`, which exists nowhere in the SDK, is
-  removed. Run `vega exec vpt validate manifest.toml` once on a machine with
-  the Vega CLI.
+  removed. (The privilege was the wrong mechanism, but the services still had
+  to be declared under `[wants]`; see "Corrections" above.) The manifest
+  validated with 0 errors in the 16 Oct release build.
 
 Refuted by the verifiers (no change needed): "Play/Pause does nothing while a
 line is read" — the document view handles it.
@@ -117,7 +139,8 @@ line is read" — the document view handles it.
 ## Commands
 
 ```
-npm test                      # app (Jest)
+npm test                      # app (Jest; App.spec is a cold-start flake under the
+                              # full parallel run, hence testTimeout 15 s in jest.config.json)
 npx tsc --noEmit && npm run lint
 npm run test:backend          # backend unit tests
 npm run build:release         # react-native build-vega

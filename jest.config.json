@@ -29,6 +29,7 @@
   "transformIgnorePatterns": [
     "node_modules/(?!(react-native|@react-native|@amazon-devices/react-native-kepler|@amazon-devices)/)"
   ],
+  "testTimeout": 15000,
   "collectCoverage": false,
   "collectCoverageFrom": [
     "src/**/*",

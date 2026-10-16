@@ -29,7 +29,7 @@ exports[`App matches snapshot 1`] = `
           "paddingBottom": 16,
         }
       }
-      showsVerticalScrollIndicator={false}
+      showsVerticalScrollIndicator={true}
       style={
         {
           "flex": 1,
@@ -44,10 +44,11 @@ exports[`App matches snapshot 1`] = `
               {
                 "color": "#FFFFFF",
                 "fontWeight": "700",
-                "marginBottom": 32,
+                "marginBottom": 16,
               },
               {
-                "fontSize": 44,
+                "fontSize": 40,
+                "lineHeight": 56,
               },
             ]
           }
@@ -59,45 +60,48 @@ exports[`App matches snapshot 1`] = `
             [
               {
                 "color": "#FFFFFF",
-                "marginBottom": 12,
+                "marginBottom": 8,
               },
               {
                 "fontSize": 24,
+                "lineHeight": 34,
               },
             ]
           }
         >
-          1. Point a phone camera at the square on the right
+          1. Point a phone at the square on the right
         </Text>
         <Text
           style={
             [
               {
                 "color": "#FFFFFF",
-                "marginBottom": 12,
+                "marginBottom": 8,
               },
               {
                 "fontSize": 24,
+                "lineHeight": 34,
               },
             ]
           }
         >
-          2. Tap the link that pops up, then photograph the letter
+          2. Tap the link, then photograph the letter
         </Text>
         <Text
           style={
             [
               {
                 "color": "#FFFFFF",
-                "marginBottom": 12,
+                "marginBottom": 8,
               },
               {
                 "fontSize": 24,
+                "lineHeight": 34,
               },
             ]
           }
         >
-          3. It appears here in large print, and can be read aloud
+          3. It appears here and can be read aloud
         </Text>
       </View>
     </RCTScrollView>
@@ -118,6 +122,7 @@ exports[`App matches snapshot 1`] = `
             },
             {
               "fontSize": 24,
+              "lineHeight": 34,
             },
           ]
         }
