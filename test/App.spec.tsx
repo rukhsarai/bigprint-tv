@@ -53,7 +53,9 @@ describe('App', () => {
     await settled();
     expect(screen.getByText('Read anything on your TV')).toBeTruthy();
     expect(
-      screen.getByText('2. Tap the link that pops up, then photograph the letter'),
+      screen.getByText(
+        '2. Tap the link that pops up, then photograph the letter',
+      ),
     ).toBeTruthy();
     expect(screen.getByTestId('pairing-waiting')).toBeTruthy();
   });
@@ -81,7 +83,10 @@ describe('App', () => {
 
   it('switches to the document when one arrives', async () => {
     render(
-      <App service={createMockDocumentService(sampleLetter, 10)} player={null} />,
+      <App
+        service={createMockDocumentService(sampleLetter, 10)}
+        player={null}
+      />,
     );
     await waitFor(() =>
       expect(screen.getByText(sampleLetter.kind)).toBeTruthy(),
@@ -92,7 +97,9 @@ describe('App', () => {
 
   it('tells the user when reading the photo failed', async () => {
     render(
-      <App service={createFailingDocumentService('Could not read that.', 10)} />,
+      <App
+        service={createFailingDocumentService('Could not read that.', 10)}
+      />,
     );
     await waitFor(() =>
       expect(screen.getByTestId('pairing-error')).toBeTruthy(),
@@ -106,14 +113,14 @@ describe('App', () => {
     await AsyncStorage.setItem('bigprint.textScale', '1.5');
     render(<App service={neverDelivers} />);
     await waitFor(() =>
-      expect(screen.getByText('Text size 1.5x (saved)')).toBeTruthy(),
+      expect(screen.getByText(/^Text size 1\.5x \(saved\)/)).toBeTruthy(),
     );
   });
 
   it('starts at the default size when nothing is saved', async () => {
     render(<App service={neverDelivers} />);
     await waitFor(() =>
-      expect(screen.getByText('Text size 1x (saved)')).toBeTruthy(),
+      expect(screen.getByText(/^Text size 1x \(saved\)/)).toBeTruthy(),
     );
   });
 });
