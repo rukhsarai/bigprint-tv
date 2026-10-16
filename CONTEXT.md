@@ -70,9 +70,11 @@ Judging criteria: Tech Implementation, Design, Potential Impact, Quality of Idea
   and the whole pairing → processing → document flow runs against the built-in
   mock. Against the real backend the pairing screen stopped at an error: the
   capture function's public URL answered 403 to every caller although the
-  function, URL and policy are configured correctly (see `AWS_SETUP.md`,
-  "Function URL answers 403 to everyone"). The audio services cannot be bound
-  on the virtual device, so read-aloud still needs real hardware.
+  function, URL and policy were configured correctly. The function now sits
+  behind an API Gateway HTTP API, verified reachable from outside AWS (see
+  `AWS_SETUP.md`). The TV has not yet been rebuilt against it. The audio
+  services cannot be bound on the virtual device, so read-aloud still needs
+  real hardware.
 - **Nothing has been run on a physical Fire TV**, and VoiceView has never been
   run against it. For an accessibility product that is a real gap — the markup
   is correct by construction, not confirmed by ear.
