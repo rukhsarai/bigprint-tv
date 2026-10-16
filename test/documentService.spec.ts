@@ -127,6 +127,81 @@ describe('createRemoteDocumentService', () => {
     unsubscribe();
   });
 
+  it('shows what the backend said when it refuses to start a session', async () => {
+    const {impl} = makeFetch([{status: 503, body: {ok: false, message: 'Busy today.'}}]);
+    const l = listener();
+    const unsubscribe = createRemoteDocumentService('https://x.test', impl, 1000).subscribe(l);
+    await flush();
+    await flush();
+    expect(l.onError).toHaveBeenCalledWith('Busy today.');
+    unsubscribe();
+  });
+
+  it('says so when the session expires while a page is being read', async () => {
+    const {impl, calls} = makeFetch([
+      {body: session},
+      {body: {ok: true, state: 'processing'}},
+      {status: 410, body: {ok: false}},
+      {body: {...session, code: '900002'}},
+      {body: {ok: true, state: 'idle'}},
+    ]);
+    const l = listener();
+    const unsubscribe = createRemoteDocumentService('https://x.test', impl, 1000).subscribe(l);
+    await flush();
+    jest.advanceTimersByTime(1000);
+    await flush();
+    await flush();
+    expect(l.onProcessing).toHaveBeenCalledTimes(1);
+    jest.advanceTimersByTime(1000);
+    await flush();
+    await flush();
+    await flush();
+    expect(calls[3].url).toBe('https://x.test/session');
+    expect(l.onSession).toHaveBeenCalledTimes(2);
+    // The notice comes after the new code, so the new code does not wipe it.
+    const order = l.onSession.mock.invocationCallOrder[1] < l.onError.mock.invocationCallOrder[0];
+    expect(order).toBe(true);
+    expect(l.onError).toHaveBeenCalledWith(
+      'The code expired while a page was being read. Please scan the QR code again and send that page once more.',
+    );
+    unsubscribe();
+  });
+
+  it('tells the user after several failed polls and clears it when polling recovers', async () => {
+    let n = 0;
+    const impl = jest.fn(async (url: string) => {
+      n += 1;
+      if (url.endsWith('/session')) {
+        return {ok: true, status: 200, json: async () => session};
+      }
+      if (n <= 6) {
+        throw new Error('offline');
+      }
+      return {ok: true, status: 200, json: async () => ({ok: true, state: 'idle'})};
+    }) as unknown as typeof fetch;
+    const l = listener();
+    const unsubscribe = createRemoteDocumentService('https://x.test', impl, 1000).subscribe(l);
+    await flush();
+    for (let i = 0; i < 4; i++) {
+      jest.advanceTimersByTime(1000);
+      await flush();
+      await flush();
+    }
+    expect(l.onError).not.toHaveBeenCalled();
+    jest.advanceTimersByTime(1000);
+    await flush();
+    await flush();
+    expect(l.onError).toHaveBeenCalledWith(
+      'The TV cannot reach the internet. Please check the connection.',
+    );
+    expect(l.onSession).toHaveBeenCalledTimes(1);
+    jest.advanceTimersByTime(1000);
+    await flush();
+    await flush();
+    expect(l.onSession).toHaveBeenCalledTimes(2);
+    unsubscribe();
+  });
+
   it('starts a new session when the backend has forgotten this one', async () => {
     const {impl, calls} = makeFetch([
       {body: session},

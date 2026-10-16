@@ -51,6 +51,43 @@ Last updated 16 October 2026.
 - Text sizes 1x–2x on a real panel; D-pad focus order; Back never exits
   unexpectedly.
 
+## Device-readiness review (16 Oct, 26 agents, every finding adversarially verified)
+
+Fixed in this branch, all covered by Jest, none yet seen on hardware:
+
+- **Back on the remote exited the app from the document view.** `DocumentView`
+  now claims `hardwareBackPress` through Vega's `BackHandler` and goes back to
+  the pairing screen. On a real TV, press Back on a document and confirm the
+  app stays open; on the pairing screen Back should still exit.
+- **Early session renewal orphaned phone pages.** The TV renewed its code 10
+  minutes before the backend expired it, so a page sent under the old code was
+  read into a session nobody watched, and a TV mid-read stayed on "Reading your
+  letter" for ever. Renewal is now driven only by the backend's 404/410, the
+  state resets on a switch, and a switch mid-read shows "The code expired while
+  a page was being read…" next to the new QR. Remaining gap: a page accepted in
+  the few seconds before the backend's own expiry is still lost (the backend
+  refuses reads of an expired code); closing it means a read-only grace period
+  in `lambda_capture.py` plus polling the old code alongside the new one.
+- **Wi-Fi loss after pairing was silent.** Five failed polls in a row now show
+  the no-network message; the first good poll re-announces the session, which
+  clears it.
+- **429/500/503 on session start said "cannot reach the internet".** The
+  backend's own message is shown instead; 401/403 say the service refused the TV.
+- **No request timeout.** Every fetch now aborts after 15 s.
+- **Audio start-timeout left the player loading**, so late audio could play
+  over the silent highlight; the element is paused on fallback. The explicit
+  `load()` call, which the package lists as unsupported, is gone.
+- **Disabled size buttons were unfocusable**, so at 2x the preferred-focus
+  button could not take focus at launch. Buttons now stay focusable and expose
+  `accessibilityState.disabled` instead.
+- `manifest.toml`: the two autolinked media modules are declared; the
+  privilege `com.amazon.system.audio`, which exists nowhere in the SDK, is
+  removed. Run `vega exec vpt validate manifest.toml` once on a machine with
+  the Vega CLI.
+
+Refuted by the verifiers (no change needed): "Play/Pause does nothing while a
+line is read" — the document view handles it.
+
 ## Facts that save time
 
 - The deploy user cannot change IAM; role/user policies are pasted in the

@@ -164,14 +164,16 @@ const SizeButton = ({
   return (
     <Pressable
       accessible={true}
-      onPress={onPress}
-      disabled={disabled}
+      // Not `disabled`: a disabled Pressable cannot take focus. With text at
+      // 2x the preferred-focus button is "Bigger text", which is at its limit,
+      // so the screen would open with nothing focused.
+      onPress={disabled ? undefined : onPress}
+      accessibilityState={{disabled: !!disabled}}
       hasTVPreferredFocus={hasTVPreferredFocus}
       onFocus={() => setFocused(true)}
       onBlur={() => setFocused(false)}
       role="button"
       aria-label={label}
-      aria-disabled={!!disabled}
       // The pairing code can never take focus, so link it to the first control.
       accessibilityDescribedBy={describedBy}
       testID={`size-button-${label}`}

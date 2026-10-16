@@ -244,8 +244,8 @@ exports[`App matches snapshot 1`] = `
           }
           accessible={true}
           collapsable={false}
-          focusable={false}
-          isPressable={true}
+          focusable={true}
+          isPressable={false}
           onBlur={[Function]}
           onClick={[Function]}
           onFocus={[Function]}

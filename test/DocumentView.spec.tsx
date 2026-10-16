@@ -1,4 +1,5 @@
 import 'react-native';
+import {BackHandler} from '@amazon-devices/react-native-kepler';
 import {render, screen, fireEvent, waitFor} from '@testing-library/react-native';
 import * as React from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -9,6 +10,11 @@ import {sampleReceipt as mockBill} from '../src/data/documents';
 /** Waits for the saved-text-size lookup to finish so React state is settled. */
 const settled = () =>
   waitFor(() => expect(screen.getByText(/Text size/)).toBeTruthy());
+
+
+/** The Jest stand-in in test/setup.js adds this; the real handler has no such thing. */
+const pressBack = (): boolean =>
+  (BackHandler as unknown as {mockPressBack: () => boolean}).mockPressBack();
 
 describe('DocumentView', () => {
   beforeEach(async () => {
@@ -45,6 +51,20 @@ describe('DocumentView', () => {
     await settled();
     fireEvent.press(screen.getByTestId('control-Back'));
     expect(onBack).toHaveBeenCalledTimes(1);
+  });
+
+  it("the remote's Back key leaves the document, not the app", async () => {
+    const onBack = jest.fn();
+    const {unmount} = render(
+      <DocumentView document={mockBill} player={null} audioUrl={() => null} onBack={onBack} />,
+    );
+    await settled();
+    expect(pressBack()).toBe(true);
+    expect(onBack).toHaveBeenCalledTimes(1);
+    expect(BackHandler.exitApp).not.toHaveBeenCalled();
+    unmount();
+    // Once the document is gone, Back falls through to the default again.
+    expect(pressBack()).toBe(false);
   });
 
   it('persists a larger text size for the next screen', async () => {

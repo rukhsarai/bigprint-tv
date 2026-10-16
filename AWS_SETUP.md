@@ -39,8 +39,14 @@ use; access is governed by IAM only.
    (replace `REPLACE-WITH-YOUR-BUCKET`, twice) → name `BigPrintTvPhase1`
 2. IAM → **Users** → **Create user** `bigprint-tv-dev`, no console access,
    attach `BigPrintTvPhase1` directly
-3. Open the user → **Add permissions** → **Create inline policy** → JSON →
-   paste `aws/iam-policy-phase2.json` → name `BigPrintTvPhase2`
+3. IAM → **Policies** → **Create policy** → JSON → paste
+   `aws/iam-policy-phase2.json` → name `BigPrintTvPhase2`. Then open the user
+   → **Add permissions** → **Attach policies directly** → tick
+   `BigPrintTvPhase2` → **Add permissions**. It must be a *managed* policy
+   like Phase 1, not an inline one: IAM caps all of a user's inline policies
+   at 2,048 non-whitespace characters in total, and Phase 2 is close to that
+   on its own. If an older inline `BigPrintTvPhase2` exists on the user,
+   remove it (user → Permissions → select it → Remove).
 4. **Security credentials** → **Create access key** → *Application running
    outside AWS* → copy both values once
 
@@ -128,6 +134,7 @@ behaviour for accounts that allow it.
 | Phone says "This code is not in use" | the TV session expired (2 h) or the TV was restarted | go back to the pairing screen and scan again |
 | Photo accepted but TV never changes | S3 trigger or process role problem | CloudWatch → `/aws/lambda/bigprint-tv-process`; `aws/deploy.py` re-applies the trigger |
 | `Maximum policy size of 2048 bytes exceeded for user` | pasting a role policy onto the user | role policies go on the roles (Part B), not on the user |
+| `Your policy exceeds the non-whitespace character limit of 2048` when editing `BigPrintTvPhase2` | the limit is the total of all *inline* policies on the user | create Phase 2 as a managed policy and attach it (A3 step 3); delete the inline copy |
 | `POST /session` returns 500; log says `not authorized to perform: s3:PutObject` on `ratelimit/` | the capture role holds an older policy without `PerAddressLimits` | paste `aws/capture-role-policy.json` over it (see "Check the paste") |
 | Log line `s3 get …: AccessDenied, treated as missing` | S3 answers 403, not 404, for a missing key when the caller cannot list the bucket; the functions treat that as "not there" | harmless on its own. If it appears for a key that exists, that role's policy is wrong |
 | `NoSuchBucket` / `AccessDenied` on S3 | bucket name mismatch | the name appears in every `aws/*.json` file and in `aws/deploy.py` |

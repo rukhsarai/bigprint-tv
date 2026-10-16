@@ -1,7 +1,8 @@
-import React, {useState} from 'react';
+import React, {useCallback, useEffect, useState} from 'react';
 // Vega's components, not stock react-native: the Fire TV accessibility props
 // (accessibilityDescribedBy, accessibilityOrientationText) are declared here.
 import {
+  BackHandler,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -36,10 +37,20 @@ export const DocumentView = ({document, player, audioUrl, onBack}: Props) => {
       audioUrl: audioUrl(index),
     });
 
-  const handleBack = () => {
+  const handleBack = useCallback(() => {
     stop();
     onBack();
-  };
+  }, [stop, onBack]);
+
+  // The remote's Back key must leave the document, not the app. Without a
+  // listener Vega's default handler exits; returning true claims the press.
+  useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      handleBack();
+      return true;
+    });
+    return () => sub.remove();
+  }, [handleBack]);
 
   // Screen reader focus follows input focus on Fire TV, so static text can
   // never be reached on its own. The key facts and any warning are linked to
@@ -231,13 +242,14 @@ const ControlButton = ({label, onPress, disabled}: ControlButtonProps) => {
   return (
     <Pressable
       accessible={true}
-      onPress={onPress}
-      disabled={disabled}
+      // Not `disabled`: a disabled Pressable cannot take focus, so the D-pad
+      // would skip it and a screen reader could never announce it.
+      onPress={disabled ? undefined : onPress}
+      accessibilityState={{disabled: !!disabled}}
       onFocus={() => setFocused(true)}
       onBlur={() => setFocused(false)}
       role="button"
       aria-label={label}
-      aria-disabled={!!disabled}
       testID={`control-${label}`}
       style={[
         styles.button,

@@ -116,8 +116,36 @@ class RefusedError extends Error {
   }
 }
 
-/** Renew this long before the backend would expire the session, in seconds. */
-const RENEW_MARGIN_SECONDS = 10 * 60;
+/** Consecutive failed polls before the TV tells the user something is wrong. */
+const POLL_FAILURES_BEFORE_NOTICE = 5;
+/** One request may take this long; a TV with Wi-Fi but no internet must not hang. */
+export const REQUEST_TIMEOUT_MS = 15 * 1000;
+const EXPIRED_WHILE_READING =
+  'The code expired while a page was being read. Please scan the QR code again and send that page once more.';
+
+class BackendError extends Error {}
+
+const explain = (e: unknown): string => {
+  if (e instanceof RefusedError) {
+    return refused(e.status);
+  }
+  if (e instanceof BackendError) {
+    return e.message;
+  }
+  return NO_NETWORK;
+};
+
+/** fetch with a deadline: an abort rejects like a network error. */
+const fetchWithTimeout = (
+  fetchImpl: typeof fetch,
+  url: string,
+  init?: {method?: string},
+): ReturnType<typeof fetch> => {
+  const ctrl = typeof AbortController === 'function' ? new AbortController() : null;
+  const timer = setTimeout(() => ctrl?.abort(), REQUEST_TIMEOUT_MS);
+  const request = ctrl ? {...init, signal: ctrl.signal} : init;
+  return Promise.resolve(fetchImpl(url, request)).finally(() => clearTimeout(timer));
+};
 
 /** The backend gives up after two minutes; the TV should not wait much longer. */
 export const PROCESSING_TIMEOUT_MS = 150 * 1000;
@@ -156,6 +184,11 @@ export const createRemoteDocumentService = (
       let lastDocumentId = '';
       let lastState: ResultResponse['state'] = 'idle';
       let processingSince: number | null = null;
+      let lastSession: PairingSession | null = null;
+      let failures = 0;
+      let noticeAfterSession: string | null = null;
+      const request = (url: string, init?: {method?: string}) =>
+        fetchWithTimeout(fetchImpl, url, init);
 
       const schedule = (fn: () => void, ms: number) => {
         if (!active) {
@@ -166,13 +199,14 @@ export const createRemoteDocumentService = (
 
       const startSession = async () => {
         try {
-          const res = await fetchImpl(`${base}/session`, {method: 'POST'});
+          const res = await request(`${base}/session`, {method: 'POST'});
           if (res.status === 401 || res.status === 403) {
             throw new RefusedError(res.status);
           }
           const body = (await res.json()) as SessionResponse;
           if (!res.ok || !body.ok) {
-            throw new Error(body.message || 'session');
+            // The backend answered (busy, capped, broken): say what it said.
+            throw new BackendError(body.message || 'Could not start a session. Please try again.');
           }
           if (!active) {
             return;
@@ -182,17 +216,24 @@ export const createRemoteDocumentService = (
             secret: body.secret,
             expiresAt: body.expiresAt,
           };
-          listener.onSession({
+          lastSession = {
             code: body.code,
             captureUrl: `${base}/?c=${body.code}&k=${encodeURIComponent(body.secret)}`,
             expiresAt: body.expiresAt,
-          });
+          };
+          failures = 0;
+          listener.onSession(lastSession);
+          if (noticeAfterSession) {
+            // Shown with the new code, so it is not wiped by the session itself.
+            listener.onError(noticeAfterSession);
+            noticeAfterSession = null;
+          }
           schedule(poll, pollIntervalMs);
         } catch (e) {
           if (!active) {
             return;
           }
-          listener.onError(e instanceof RefusedError ? refused(e.status) : NO_NETWORK);
+          listener.onError(explain(e));
           // Keep trying quietly; the error clears when a session arrives.
           schedule(startSession, 10000);
         }
@@ -202,18 +243,22 @@ export const createRemoteDocumentService = (
         if (!active || !current) {
           return;
         }
-        const nowSeconds = Date.now() / 1000;
-        if (current.expiresAt - nowSeconds < RENEW_MARGIN_SECONDS) {
-          current = null;
-          startSession();
-          return;
-        }
+        // Renewal is driven by the backend, never by this clock: a 404 or 410
+        // below means the session is over. Renewing early would abandon a code
+        // the backend still accepts, so a phone page sent under it would be
+        // read into a session nobody is watching.
         try {
           const q = `c=${current.code}&k=${encodeURIComponent(current.secret)}&since=${encodeURIComponent(lastDocumentId)}`;
-          const res = await fetchImpl(`${base}/result?${q}`);
+          const res = await request(`${base}/result?${q}`);
           if (res.status === 404 || res.status === 410) {
-            // The backend forgot us (expiry, redeploy). Start again.
+            // The backend forgot us (expiry, redeploy). Start again, and say
+            // so if a page was mid-read: its result cannot reach this TV now.
+            if (lastState === 'processing') {
+              noticeAfterSession = EXPIRED_WHILE_READING;
+            }
             current = null;
+            lastState = 'idle';
+            processingSince = null;
             startSession();
             return;
           }
@@ -254,8 +299,23 @@ export const createRemoteDocumentService = (
           }
           lastState = body.state;
         } catch {
-          // A single failed poll is not worth alarming anyone; keep going.
+          // One failed poll is not worth alarming anyone. Several in a row
+          // mean the network or the backend is gone: say so, keep the session
+          // (the backend may still finish a page under it), and keep trying.
+          failures += 1;
+          if (failures === POLL_FAILURES_BEFORE_NOTICE) {
+            listener.onError(NO_NETWORK);
+            lastState = 'idle';
+            processingSince = null;
+          }
+          schedule(poll, pollIntervalMs);
+          return;
         }
+        if (failures >= POLL_FAILURES_BEFORE_NOTICE && lastSession) {
+          // Back online: re-announce the session, which clears the notice.
+          listener.onSession(lastSession);
+        }
+        failures = 0;
         schedule(poll, pollIntervalMs);
       };
 

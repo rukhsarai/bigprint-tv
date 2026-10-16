@@ -37,7 +37,6 @@ export type MediaElementLike = {
   pause: () => void;
   addEventListener: (type: string, listener: () => void) => void;
   removeEventListener: (type: string, listener: () => void) => void;
-  load?: () => void;
 };
 
 const withTimeout = <T,>(work: Promise<T>, ms: number, what: string) =>
@@ -119,6 +118,13 @@ export const createMediaElementPlayer = (
           };
           const onError = () => {
             quiet();
+            // Stop the element too: audio that starts late must not play over
+            // the silent highlight and then be cut off mid-word.
+            try {
+              el.pause();
+            } catch {
+              // nothing to stop
+            }
             handlers.onError('playback failed');
           };
           el.addEventListener('ended', onEnded);
@@ -132,10 +138,9 @@ export const createMediaElementPlayer = (
               el.removeEventListener(type, onEnded),
             );
           };
+          // Setting src is the package's documented URL-mode path and loads
+          // the media itself; an explicit load() is listed as unsupported.
           el.src = url;
-          if (el.load) {
-            el.load();
-          }
           const startedAt = Date.now();
           let heard = false;
           tick = setInterval(() => {

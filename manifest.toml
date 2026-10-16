@@ -10,10 +10,8 @@ min = "1.2"
 target = "1.2"
 
 [needs]
-# Audio playback for the Polly read-aloud feature.
-[[needs.privilege]]
-id = "com.amazon.system.audio"
-
+# No privileges: audio playback through the W3C media module needs none, and
+# "com.amazon.system.audio", declared here before, exists nowhere in the SDK.
 [[needs.module]]
 id = "/com.amazon.vega.os@IVega_1_2"
 
