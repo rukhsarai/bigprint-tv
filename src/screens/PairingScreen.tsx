@@ -4,6 +4,7 @@ import React, {useState} from 'react';
 // Vega's components, not stock react-native: the Fire TV accessibility props
 // (accessibilityDescribedBy, accessibilityOrientationText) are declared here.
 import {
+  Dimensions,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -41,6 +42,14 @@ export const PairingScreen = ({status, session, error}: Props) => {
   const {scale, typeAt, restored, changeScale, canGoBigger, canGoSmaller} =
     useTextScale();
   const spokenCode = session ? session.code.split('').join(' ') : '';
+  // Shown in the debug line so a tester can read the logical viewport off the
+  // screen: the instruction block overflowed at 1x on the virtual device, and
+  // the layout below only does that at a logical size well under 1080p. A TV
+  // window does not change size, so a one-off read is enough.
+  const window = Dimensions.get('window');
+  const windowText = `${Math.round(window.width)}×${Math.round(
+    window.height,
+  )} @${window.scale}x`;
 
   return (
     <View
@@ -52,26 +61,27 @@ export const PairingScreen = ({status, session, error}: Props) => {
         'Text size controls are at the bottom left.'
       }>
       <View style={styles.left}>
-        {/* The instructions are kept short and the title compact so all three
-            steps fit above the controls at 1x and 1.25x. At the largest sizes
-            they scroll, with the indicator shown so a cut-off line reads as
-            "more below" rather than as a rendering fault. */}
+        {/* Nothing in this block can take focus, so a remote cannot scroll it:
+            whatever does not fit above the controls is simply cut off. The
+            title is kept compact to give the three steps room. On the virtual
+            device the block overflowed at 1x before the title was shrunk;
+            whether it fits now is unverified (see HANDOFF.md, open bug). */}
         <ScrollView
           style={styles.textScroll}
           contentContainerStyle={styles.textScrollContent}
-          showsVerticalScrollIndicator={true}>
+          showsVerticalScrollIndicator={false}>
           <Text role="heading" style={[styles.title, typeAt(40)]}>
             Read anything on your TV
           </Text>
 
           <Text style={[styles.body, typeAt(24)]}>
-            1. Point a phone at the square on the right
+            1. Point a phone camera at the square on the right
           </Text>
           <Text style={[styles.body, typeAt(24)]}>
-            2. Tap the link, then photograph the letter
+            2. Tap the link that pops up, then photograph the letter
           </Text>
           <Text style={[styles.body, typeAt(24)]}>
-            3. It appears here and can be read aloud
+            3. It appears here in large print, and can be read aloud
           </Text>
         </ScrollView>
 
@@ -112,7 +122,9 @@ export const PairingScreen = ({status, session, error}: Props) => {
           </TVFocusGuideView>
 
           <Text style={styles.debug}>
-            {restored ? `Text size ${scale}x (saved)` : 'Loading your settings…'}
+            {restored
+              ? `Text size ${scale}x (saved) · ${windowText}`
+              : 'Loading your settings…'}
           </Text>
         </View>
       </View>

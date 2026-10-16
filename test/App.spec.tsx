@@ -53,7 +53,7 @@ describe('App', () => {
     await settled();
     expect(screen.getByText('Read anything on your TV')).toBeTruthy();
     expect(
-      screen.getByText('2. Tap the link, then photograph the letter'),
+      screen.getByText('2. Tap the link that pops up, then photograph the letter'),
     ).toBeTruthy();
     expect(screen.getByTestId('pairing-waiting')).toBeTruthy();
   });

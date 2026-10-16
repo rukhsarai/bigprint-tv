@@ -1,7 +1,11 @@
 # Handoff: making BigPrint TV ready for any TV
 
 Read this first. Branch `claude/upbeat-rubin-ad0wgg`, draft PR
-[rukhsarai/bigprint-tv#1](https://github.com/rukhsarai/bigprint-tv/pull/1).
+[rukhsarai/bigprint-tv#1](https://github.com/rukhsarai/bigprint-tv/pull/1);
+the follow-up from the on-device run is
+[rukhsarai/bigprint-tv#2](https://github.com/rukhsarai/bigprint-tv/pull/2).
+The description of PR #1 predates the device run and still talks about a
+public Function URL and untested audio; this file is current, it is not.
 Last updated 16 October 2026 (afternoon, after the first on-device run
 against the live backend).
 
@@ -31,43 +35,77 @@ against the live backend).
   `[wants]` services. The error was `unauthorized access: missing
   [[wants.service]] manifest declaration, service = com.amazon.audio.system`.
   The manifest now declares the media and audio services (and `[offers]`
-  `com.amazon.gipc.uuid.*`), and playback was verified from the media
-  pipeline's events: `waiting → canplay → playing → ended`, about 7 s for a
-  seven-line document. The non-obvious part: `com.amazon.audio.system` is
-  required even though the media-player setup guide lists only
-  `audio.stream` and `audio.control`; declaring those two alone still fails.
-- The old `-41` conclusion was generalised from `UISoundManager` (UI click
+  `com.amazon.gipc.uuid.*`), and playback of one line was verified from the
+  media pipeline's events: one `waiting → canplay → playing → ended` cycle,
+  about 7 s. Each line is its own MP3 (the document had seven) and only one
+  cycle was logged, so playing several lines in a row is still unverified.
+  The non-obvious part: `com.amazon.audio.system` is the service the device
+  log named, and the media-player setup guide's list does not mention it;
+  declaring `audio.stream` and `audio.control` without it still fails.
+- During the 16 Oct test session an early conclusion that the virtual device
+  could not bind audio at all was drawn from `UISoundManager` (UI click
   sounds) failing. That is a different route from read-aloud; do not infer
-  one from the other.
+  one from the other. Where the original `-41` note came from is not
+  recorded.
 - Audio was verified from pipeline events, not by ear. Word-highlight sync
   with the voice is still unconfirmed (see "Still unverified").
 
-## Fixed on device, 16 Oct afternoon
+## Fixed and verified on the virtual device, 16 Oct afternoon
 
 - **Read-aloud silent**: `[wants]` / `[offers]` added to `manifest.toml`.
   Verified, see above.
-- **Wrapped text clipped mid-glyph**: every scaled `Text` set `fontSize`
-  without `lineHeight`, so a wrapped string measured too short and its lower
-  lines were clipped through the glyphs. The one exception, the document
-  line, was the only text that rendered correctly. `useTextScale` now has
-  `typeAt(size)` returning `{fontSize, lineHeight}` (ratio 1.4) and every
-  scaled text on both screens uses it.
-- **Pairing-screen instructions overflowed** at 1x: step 2 was cut at the
-  ScrollView's clip edge with the status line drawn over it, and step 3 was
-  out of view. Taller line boxes from the fix above made it marginally
-  worse. Applied the cheap options from the test report: title 44 → 40 with
-  a 16 px margin, instruction copy shortened, spacing tightened, and the
-  scroll indicator shown so any remaining overflow at 1.5x/2x reads as
-  "more below". **Not yet seen on a device**; re-check at every size. If it
-  still overflows at 1x, the remaining option is to give the instruction
-  block a fixed share of the column, which is poor for this audience, so
-  prefer shortening copy further.
+- **Wrapped text clipped mid-glyph**: every scaled `Text` except the
+  document line set `fontSize` without `lineHeight`, so a wrapped string
+  measured too short and its lower lines were clipped through the glyphs.
+  The document line, which already set a line height, was the only text
+  that rendered correctly. `useTextScale` now has `typeAt(size)` returning
+  `{fontSize, lineHeight}` (ratio 1.4) and every scaled text on both screens
+  uses it.
+
+## Open bug: pairing-screen instructions overflow (changed, not verified)
+
+At 1x on the virtual device, step 2 was cut at the ScrollView's clip edge
+with the status line drawn over it, and step 3 was out of view. The
+`lineHeight` fix above makes each line box taller, so it slightly worsens
+this while fixing the mid-glyph clipping.
+
+What is in the branch now: title 44 → 40 with a 16 px margin and the step
+spacing 12 → 8. That saves roughly 35–40 px and nothing more. The step copy
+is unchanged: shortening it did not change how many lines each step wraps
+to, so it bought no height. The scroll indicator is not shown: nothing in
+the block can take focus, so a remote cannot scroll it, and an indicator
+would advertise content the user cannot reach.
+
+Two facts to settle before the next change, because the fix depends on
+them:
+
+- **The logical viewport.** With the file's own numbers (96/54 padding,
+  left column 3/5 of the width, ~177 px of controls) the old block fit
+  comfortably at 1x on a 1920×1080 or 1280×720 logical screen; the reported
+  symptom only reproduces at a logical size around 960×540 (a density-2
+  screen), where the title and every step wrap to two lines. In that
+  geometry the current block still overflows by about 120 px at 1x. The
+  pairing screen's debug line now shows the window size and scale next to
+  the text size; read it off the screen on the next run and record it here.
+- **Whether the steps may scroll.** The test report advises against a
+  scrollable instruction list for this audience. If overflow must be
+  reachable at 1.5x and 2x, the steps have to be focusable (a
+  `TVFocusGuideView` of `Pressable`s, as the document view does for lines);
+  that changes the focus order from the size buttons and is a design call.
+
+If the viewport is 960×540, the whole screen is laid out for twice its
+size (the 300 px QR plus 48 px frame does not fit a 307 px column either)
+and the right fix is to size the pairing screen for that viewport: a title
+that fits one line (about 28 px bold, or placed above both columns) and
+steps that fit one line each at 1x.
 
 ## Still unverified
 
 - Real Fire TV hardware. Everything above is the x86_64 virtual device;
   `vega device list` never showed a physical device.
 - Audible confirmation and word-highlight sync with the voice.
+- Playing more than one line in a row; only one line's playback was logged.
+- The pairing-screen layout at every text size (see the open bug above).
 - Remote Back key on a physical remote: Back on a document returns to the
   pairing screen, Back on the pairing screen exits, and nothing else exits.
 - **VoiceView** (Fire TV screen reader) against both screens.

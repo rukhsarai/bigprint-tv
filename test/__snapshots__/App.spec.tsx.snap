@@ -29,7 +29,7 @@ exports[`App matches snapshot 1`] = `
           "paddingBottom": 16,
         }
       }
-      showsVerticalScrollIndicator={true}
+      showsVerticalScrollIndicator={false}
       style={
         {
           "flex": 1,
@@ -69,7 +69,7 @@ exports[`App matches snapshot 1`] = `
             ]
           }
         >
-          1. Point a phone at the square on the right
+          1. Point a phone camera at the square on the right
         </Text>
         <Text
           style={
@@ -85,7 +85,7 @@ exports[`App matches snapshot 1`] = `
             ]
           }
         >
-          2. Tap the link, then photograph the letter
+          2. Tap the link that pops up, then photograph the letter
         </Text>
         <Text
           style={
@@ -101,7 +101,7 @@ exports[`App matches snapshot 1`] = `
             ]
           }
         >
-          3. It appears here and can be read aloud
+          3. It appears here in large print, and can be read aloud
         </Text>
       </View>
     </RCTScrollView>
@@ -313,7 +313,7 @@ exports[`App matches snapshot 1`] = `
           }
         }
       >
-        Text size 1x (saved)
+        Text size 1x (saved) · 750×1334 @2x
       </Text>
     </View>
   </View>

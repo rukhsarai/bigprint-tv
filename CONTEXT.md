@@ -60,27 +60,28 @@ Judging criteria: Tech Implementation, Design, Potential Impact, Quality of Idea
 | Accessibility | Audited against Amazon's A11Y Compass and fixed; new states have spoken equivalents |
 | Backend | Two Lambdas + S3 behind an API Gateway HTTP API, deployed; see `backend/README.md` |
 | Pipeline | Textract LAYOUT+TABLES (headings kept) → Nova Lite classify → AnalyzeExpense + Nova Pro image cross-check → Nova Pro rewrite with the letter fenced as data → currency guard → whole-figure numeric guard → Polly neural with word marks |
-| Tests | App: 49 Jest tests, typecheck clean, 0 lint errors. Backend: 26 unit tests |
+| Tests | App: 55 Jest tests, typecheck clean, 0 lint errors. Backend: 26 unit tests |
 | Abuse limits | 128-bit session secret, JPEG-only 4 MB uploads, 20 per session, 40 sessions and 80 uploads per address per day, a 200 docs/day cap spent only after a real read, 1-day data expiry |
 
 ### Unverified
 
 - **Virtual device, 16 October:** this branch builds, installs and launches on
   the x86_64 virtual device (cold launch under a second), D-pad input works,
-  and the whole pairing → processing → document flow runs against the built-in
-  mock. Against the real backend the pairing screen stopped at an error: the
-  capture function's public URL answered 403 to every caller although the
-  function, URL and policy were configured correctly. The function now sits
-  behind an API Gateway HTTP API, verified reachable from outside AWS (see
-  `AWS_SETUP.md`). The TV has not yet been rebuilt against it. The audio
-  services cannot be bound on the virtual device, so read-aloud still needs
-  real hardware.
+  and the whole pairing → phone photo → OCR → document flow ran against the
+  live backend through the API Gateway HTTP API (upload to document on screen
+  in about 8 s, two real photos read correctly). Read-aloud plays on the
+  virtual device once the manifest declares the audio services under
+  `[wants]`; an earlier note that the audio services "cannot be bound" there
+  was wrong. One open layout bug: the pairing-screen instructions overflow at
+  1x, see `HANDOFF.md`.
 - **Nothing has been run on a physical Fire TV**, and VoiceView has never been
   run against it. For an accessibility product that is a real gap — the markup
   is correct by construction, not confirmed by ear.
-- **Audio playback on the virtual device.** The W3C media `AudioPlayer` is
-  wired up per its type definitions; it has not yet been heard on a device.
-  If it fails, the app falls back to the silent highlight automatically.
+- **Audible confirmation and word-highlight sync.** Playback was verified from
+  the media pipeline's events (`playing → ended`) for one line, not by ear;
+  whether the highlight follows the voice, and whether several lines play in
+  a row, is unconfirmed. If audio fails, the app falls back to the silent
+  highlight automatically.
 - **The phone page on a real iPhone.** HEIC → JPEG conversion relies on Safari
   decoding HEIC into a canvas, which it does on iOS 11+, but it has only been
   reasoned about, not tapped.

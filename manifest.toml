@@ -36,14 +36,16 @@ id = "/com.amazon.kepler.kepler_media_controls_1@IKeplerMediaControls_0"
 [[needs.module]]
 id = "/com.amazon.kepler.keplermediadescriptor_1@IKeplermediadescriptor_1"
 
-# Services the W3C media AudioPlayer connects to at runtime. Without these the
-# device refuses the IPC connection ("unauthorized access: missing
-# [[wants.service]] manifest declaration") and read-aloud is silent, with
-# nothing in the app log but "MediaPlayer: pause". Verified on the virtual
-# device on 16 Oct 2026. Note that com.amazon.audio.system is required even
-# though the media-player setup guide lists only audio.stream and
-# audio.control: the device log names it explicitly, and declaring the other
-# two alone still fails.
+# Media and audio services for the W3C media AudioPlayer (read-aloud). With no
+# [wants] at all the device refused the IPC connection ("unauthorized access:
+# missing [[wants.service]] manifest declaration, service =
+# com.amazon.audio.system") and read-aloud was silent, with nothing in the app
+# log but "MediaPlayer: pause". Verified fixed on the virtual device, 16 Oct
+# 2026. The list mirrors Amazon's Vega TV Interfaces sample manifest minus its
+# input, network and DRM services, which this app does not use; it has not
+# been trimmed further. com.amazon.audio.system is the one the device log
+# named, and the media-player setup guide's list does not mention it:
+# declaring audio.stream and audio.control without it still fails.
 [wants]
 [[wants.service]]
 id = "com.amazon.media.server"
