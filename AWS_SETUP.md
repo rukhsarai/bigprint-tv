@@ -101,9 +101,18 @@ cd backend && . .venv/bin/activate   # or any venv with boto3
 python ../aws/deploy.py
 ```
 
-It creates or updates both functions, the public URL, the S3 trigger and the
-one-day lifecycle rules, then prints the capture URL. Put that in
-`src/config.ts` as `CAPTURE_BASE_URL` and rebuild the app.
+It creates or updates both functions, the HTTP API in front of the capture
+function (the public endpoint, throttled to 20 requests a second), the S3
+trigger and the one-day lifecycle rules, then makes one anonymous request to
+the endpoint to prove it is reachable and prints it. Run it with
+`--write-config` to put the endpoint into `src/config.ts`, then rebuild the app.
+
+Why an API and not the function's own public URL: in this account the public
+Function URL is configured exactly as documented and still answers 403 to
+every anonymous caller (a control above the function, which the deploy user
+cannot see). API Gateway invokes the function as a service principal, so the
+function needs no public policy at all. `--function-url` restores the old
+behaviour for accounts that allow it.
 
 `python ../aws/deploy.py --status` shows what exists.
 
@@ -123,4 +132,5 @@ one-day lifecycle rules, then prints the capture URL. Put that in
 | Log line `s3 get …: AccessDenied, treated as missing` | S3 answers 403, not 404, for a missing key when the caller cannot list the bucket; the functions treat that as "not there" | harmless on its own. If it appears for a key that exists, that role's policy is wrong |
 | `NoSuchBucket` / `AccessDenied` on S3 | bucket name mismatch | the name appears in every `aws/*.json` file and in `aws/deploy.py` |
 | Textract `UnsupportedDocumentException` | HEIC or WebP | the phone page converts to JPEG; `run_batch.py` skips other formats |
-| **Function URL answers 403 `AccessDeniedException` to everyone** (TV shows "The reading service refused this TV (error 403)"), while a direct invoke works | the URL is configured but something refuses anonymous callers: the URL was created as `AWS_IAM`, the public statement is missing, or an AWS Organizations guardrail forbids public function URLs | `python ../aws/deploy.py` now prints the auth type, whether the public statement is present, and the result of an anonymous `GET /health`. If it says `NONE`, `present` and still 403, the block is above the function: ask whoever administers the organisation, or put CloudFront in front of the function (origin access control signs requests, so the URL can be `AWS_IAM` and nothing public is needed) |
+| **The endpoint answers 403 `AccessDeniedException` to everyone** (TV shows "The reading service refused this TV (error 403)"), while a direct invoke works | for a Function URL: configured correctly and still refused by a control above the function (seen in this account on 16 Oct 2026); for the API: the `api-gateway` permission statement is missing on the function | `python ../aws/deploy.py` makes an anonymous `GET /health` and reports. The API route is the default precisely because of this; if even the API is refused, ask whoever administers the AWS organisation which guardrail applies |
+| `apigateway:GET … not authorized` from `deploy.py` | the user's phase-2 policy predates the API | paste the current `aws/iam-policy-phase2.json` over `BigPrintTvPhase2` (Part A, step 3) |

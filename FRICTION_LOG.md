@@ -281,3 +281,35 @@ repository now does), so the rewrite is a no-op.
 **Suggestion:** Print one line when autolinking adds a module to the manifest,
 and point at the `kepler-compatibility.json` it took the id from. Better still,
 offer a `--check` mode that fails instead of writing, for CI.
+
+## 10. A public Lambda Function URL, configured exactly as documented, answers 403 to everyone
+
+**Severity: High — the TV could not reach its backend at all.**
+
+**Task:** Expose the capture function on a public URL (`AuthType NONE`) so a
+phone and a TV can call it with no AWS credentials.
+
+**Steps:** `CreateFunctionUrlConfig` with `AuthType NONE`; `AddPermission`
+with action `lambda:InvokeFunctionUrl`, principal `*`, condition
+`lambda:FunctionUrlAuthType = NONE` (the statement the documentation gives);
+`curl` the URL from a laptop.
+
+**Expected:** 200 from `/health`.
+
+**Actual:** `403 AccessDeniedException` with the body "Forbidden. For
+troubleshooting Function URL authorization issues, see urls-auth". The function
+invokes fine through the API, `GetFunctionUrlConfig` says `NONE`, `GetPolicy`
+shows the statement verbatim. The deploy user cannot call
+`organizations:DescribeOrganization`, so whatever refuses the request (an
+organisation-level control is the only thing left) cannot be seen from the
+account that owns the function, and the error names no control.
+
+**Workaround:** An API Gateway HTTP API in front of the function. The API
+invokes the function as a service principal, so no public statement is needed
+on the function, and the event format is the same (payload 2.0), so the code
+did not change. `aws/deploy.py` now does this by default.
+
+**Suggestion:** When a Function URL request is refused by something other
+than the function's own policy, say so in the 403 body ("refused by an
+organisation policy"), and let `GetFunctionUrlConfig` report an effective
+public-access state. Hours went into re-checking a policy that was right.

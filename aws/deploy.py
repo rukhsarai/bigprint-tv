@@ -3,11 +3,17 @@
 Deploy or update the BigPrint TV backend. Safe to run repeatedly.
 
     cd backend && python -m venv .venv && . .venv/bin/activate && pip install boto3
-    python ../aws/deploy.py            # creates or updates everything, prints the URL
-    python ../aws/deploy.py --status   # just show what exists
+    python ../aws/deploy.py                 # creates or updates everything, prints the endpoint
+    python ../aws/deploy.py --write-config  # ...and writes it into src/config.ts
+    python ../aws/deploy.py --status        # just show what exists
 
 What it creates, all in us-east-1, all named bigprint-tv-*:
-  - Lambda bigprint-tv-capture  (public Function URL, reserved concurrency 5 where the account allows)
+  - Lambda bigprint-tv-capture  (reserved concurrency 5 where the account allows)
+  - API Gateway HTTP API bigprint-tv in front of it: the public endpoint. The
+    function is invoked by the API Gateway service principal, so the function
+    itself needs no public policy, and accounts whose guardrails refuse public
+    Lambda function URLs (they answer 403 to everyone) still work. The stage
+    is throttled as a first line of abuse control.
   - Lambda bigprint-tv-process  (S3-triggered, reserved concurrency 3 where the account allows)
   - S3 notification uploads/*.jpg -> process function
   - S3 lifecycle: uploads/, results/, sessions/, counters/, ratelimit/ deleted after 1 day
@@ -23,6 +29,7 @@ import argparse
 import io
 import json
 import os
+import re
 import sys
 import time
 import zipfile
@@ -61,6 +68,13 @@ FUNCTIONS = {
 
 lam = boto3.client("lambda", region_name=REGION)
 s3 = boto3.client("s3", region_name=REGION)
+agw = boto3.client("apigatewayv2", region_name=REGION)
+
+API_NAME = "bigprint-tv"
+# Requests per second, sustained and burst, across all callers. Plenty for a
+# TV polling every 3 s plus phones; far below anything that costs money.
+API_RATE = 20.0
+API_BURST = 50
 
 
 def zip_bytes(files: list[str]) -> bytes:
@@ -123,7 +137,36 @@ def ensure_function(name: str, spec: dict) -> str:
     return lam.get_function_configuration(FunctionName=name)["FunctionArn"]
 
 
+def ensure_api(capture_arn: str) -> str:
+    """An HTTP API with one $default route to the capture function.
+
+    Quick-create wires the route, the AWS_PROXY integration (payload format
+    2.0, the same event shape as a function URL) and an auto-deployed $default
+    stage in one call, so the Lambda code does not change.
+    """
+    existing = [a for a in agw.get_apis()["Items"] if a["Name"] == API_NAME]
+    if existing:
+        api = existing[0]
+    else:
+        api = agw.create_api(Name=API_NAME, ProtocolType="HTTP", Target=capture_arn,
+                             Description="BigPrint TV capture endpoint")
+    api_id = api["ApiId"]
+    agw.update_stage(ApiId=api_id, StageName="$default", AutoDeploy=True,
+                     DefaultRouteSettings={"ThrottlingRateLimit": API_RATE, "ThrottlingBurstLimit": API_BURST})
+    try:
+        lam.add_permission(
+            FunctionName="bigprint-tv-capture", StatementId="api-gateway", Action="lambda:InvokeFunction",
+            Principal="apigateway.amazonaws.com", SourceArn=f"arn:aws:execute-api:{REGION}:{ACCOUNT}:{api_id}/*",
+        )
+    except ClientError as e:
+        if e.response["Error"]["Code"] != "ResourceConflictException":
+            raise
+    return api["ApiEndpoint"]
+
+
 def ensure_url(name: str) -> str:
+    """The older public Function URL. Kept behind --function-url for accounts
+    that allow it; the API is the default because some do not."""
     try:
         url = lam.get_function_url_config(FunctionName=name)["FunctionUrl"]
     except ClientError as e:
@@ -141,21 +184,22 @@ def ensure_url(name: str) -> str:
     return url
 
 
-def check_url(name: str, url: str) -> bool:
-    """A function URL can be configured correctly and still answer 403 to the
-    public (an organisation guardrail, or a URL created as AWS_IAM). Only an
-    anonymous request proves it works, so make one."""
+def remove_url(name: str):
+    """Drop the Function URL and its public statement once the API is live, so
+    there is one front door and no dangling public policy."""
+    for call in (lambda: lam.delete_function_url_config(FunctionName=name),
+                 lambda: lam.remove_permission(FunctionName=name, StatementId="public-url")):
+        try:
+            call()
+        except ClientError as e:
+            if e.response["Error"]["Code"] != "ResourceNotFoundException":
+                print(f"  (could not remove the old function URL piece: {e.response['Error']['Code']})")
+
+
+def check_endpoint(url: str) -> bool:
+    """Only an anonymous request proves the endpoint is public, so make one."""
     import urllib.error
     import urllib.request
-    try:
-        policy = json.loads(lam.get_policy(FunctionName=name)["Policy"])
-        public = [s for s in policy.get("Statement", [])
-                  if s.get("Action") == "lambda:InvokeFunctionUrl" and s.get("Principal") in ("*", {"AWS": "*"})]
-        print(f"  resource policy: public URL statement {'present' if public else 'MISSING'}")
-    except ClientError as e:
-        print(f"  resource policy: could not read ({e.response['Error']['Code']})")
-    auth = lam.get_function_url_config(FunctionName=name).get("AuthType")
-    print(f"  URL auth type: {auth}")
     try:
         with urllib.request.urlopen(url.rstrip("/") + "/health", timeout=10) as r:
             print(f"  anonymous GET /health -> {r.status}")
@@ -163,13 +207,25 @@ def check_url(name: str, url: str) -> bool:
     except urllib.error.HTTPError as e:
         print(f"  anonymous GET /health -> {e.code} {e.read(120)!r}")
         if e.code == 403:
-            print("  403 for an anonymous caller, with the statement present and AuthType NONE, means\n"
-                  "  something above this function refuses public URLs. See AWS_SETUP.md,\n"
-                  "  'Function URL answers 403 to everyone'.")
+            print("  403 for an anonymous caller means something in the account refuses public\n"
+                  "  endpoints. See AWS_SETUP.md, 'The endpoint answers 403 to everyone'.")
         return False
     except Exception as e:  # noqa: BLE001 - a diagnostic, not a control path
         print(f"  anonymous GET /health failed: {e}")
         return False
+
+
+def write_config(url: str):
+    path = os.path.join(HERE, "..", "src", "config.ts")
+    with open(path, encoding="utf-8") as f:
+        text = f.read()
+    new, n = re.subn(r"export const CAPTURE_BASE_URL =\n  '[^']*';", f"export const CAPTURE_BASE_URL =\n  '{url}';", text)
+    if n != 1:
+        print("  could not find CAPTURE_BASE_URL in src/config.ts; set it by hand")
+        return
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(new)
+    print("  wrote src/config.ts; rebuild the app")
 
 
 def ensure_no_retries(name: str):
@@ -223,31 +279,43 @@ def status():
                   f"updated {cfg['LastModified']}")
         except ClientError:
             print(f"{name}: not deployed")
+    apis = [a for a in agw.get_apis()["Items"] if a["Name"] == API_NAME]
+    print("endpoint:", apis[0]["ApiEndpoint"] if apis else "none")
     try:
-        print("capture URL:", lam.get_function_url_config(FunctionName="bigprint-tv-capture")["FunctionUrl"])
+        print("old function URL:", lam.get_function_url_config(FunctionName="bigprint-tv-capture")["FunctionUrl"])
     except ClientError:
-        print("capture URL: none")
+        pass
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--status", action="store_true")
+    ap.add_argument("--write-config", action="store_true", help="put the endpoint into src/config.ts")
+    ap.add_argument("--function-url", action="store_true",
+                    help="use a public Lambda Function URL instead of the API (not every account allows one)")
     args = ap.parse_args()
     if args.status:
         status()
         return
     capture_arn = ensure_function("bigprint-tv-capture", FUNCTIONS["bigprint-tv-capture"])
     process_arn = ensure_function("bigprint-tv-process", FUNCTIONS["bigprint-tv-process"])
-    url = ensure_url("bigprint-tv-capture")
+    if args.function_url:
+        url = ensure_url("bigprint-tv-capture")
+    else:
+        url = ensure_api(capture_arn)
+        remove_url("bigprint-tv-capture")
     ensure_no_retries("bigprint-tv-process")
     ensure_s3_trigger(process_arn)
     ensure_lifecycle()
     print()
-    print("Capture URL:", url)
-    reachable = check_url("bigprint-tv-capture", url)
+    print("Endpoint:", url)
+    reachable = check_endpoint(url)
     if not reachable:
         print("The TV will show 'The reading service refused this TV' until this is fixed.")
-    print("Put it in src/config.ts as CAPTURE_BASE_URL (without the trailing slash).")
+    if args.write_config:
+        write_config(url)
+    else:
+        print("Put it in src/config.ts as CAPTURE_BASE_URL (without the trailing slash), or rerun with --write-config.")
     print(json.dumps({"capture": capture_arn, "process": process_arn}, indent=1))
 
 

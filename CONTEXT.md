@@ -58,7 +58,7 @@ Judging criteria: Tech Implementation, Design, Potential Impact, Quality of Idea
 | Document view | Large print, D-pad line navigation, read-aloud with word highlight driven by real audio |
 | Text size | 1x / 1.25x / 1.5x / 2x, persisted, shared across screens |
 | Accessibility | Audited against Amazon's A11Y Compass and fixed; new states have spoken equivalents |
-| Backend | Two Lambdas + S3, deployed; see `backend/README.md` |
+| Backend | Two Lambdas + S3 behind an API Gateway HTTP API, deployed; see `backend/README.md` |
 | Pipeline | Textract LAYOUT+TABLES (headings kept) → Nova Lite classify → AnalyzeExpense + Nova Pro image cross-check → Nova Pro rewrite with the letter fenced as data → currency guard → whole-figure numeric guard → Polly neural with word marks |
 | Tests | App: 49 Jest tests, typecheck clean, 0 lint errors. Backend: 26 unit tests |
 | Abuse limits | 128-bit session secret, JPEG-only 4 MB uploads, 20 per session, 40 sessions and 80 uploads per address per day, a 200 docs/day cap spent only after a real read, 1-day data expiry |

@@ -3,7 +3,7 @@
 Two small AWS Lambda functions and one S3 bucket. Nothing runs between uses.
 
 ```
-phone ──POST /upload──▶ capture Lambda ──▶ S3 uploads/<sid>/…jpg
+phone ──POST /upload──▶ HTTP API ──▶ capture Lambda ──▶ S3 uploads/<sid>/…jpg
                                                  │ (S3 event)
                                                  ▼
 TV ◀──GET /result────── capture Lambda ◀── S3 results/<sid>/… ◀── process Lambda
@@ -15,7 +15,7 @@ TV ◀──GET /audio─────── capture Lambda                      
 
 | File | What it is |
 |---|---|
-| `lambda_capture.py` | The only public endpoint. Issues pairing sessions, serves the phone page, accepts one JPEG, hands results and audio to the TV. Cannot call any AI service. |
+| `lambda_capture.py` | Behind the API, the only public surface. Issues pairing sessions, serves the phone page, accepts one JPEG, hands results and audio to the TV. Cannot call any AI service. |
 | `capture_page.html` | The phone page. Downscales and re-encodes the photo as JPEG in the browser (this is also what makes iPhone HEIC work). |
 | `lambda_process.py` | Triggered by S3. Runs the pipeline, makes the audio, writes the result. No public endpoint. |
 | `pipeline.py` | photo → OCR with layout and tables → classify → key facts (cross-checked) → plain English → currency guard → numeric guard |
@@ -155,8 +155,18 @@ python ../aws/deploy.py           # creates or updates everything, prints the UR
 Then put the printed URL in `src/config.ts`. See `AWS_SETUP.md` for the IAM
 pieces that must exist first.
 
+## The front door
+
+The capture function sits behind an API Gateway HTTP API (`aws/deploy.py`
+creates it), not its own public Function URL. In this account the Function URL
+was configured exactly as documented and still answered 403 to every anonymous
+caller, which points at a guardrail above the function; the API invokes the
+function as a service principal, so nothing public has to be granted on the
+function itself. The API's `$default` stage is throttled to 20 requests a
+second with a burst of 50, which is ample for TVs polling every 3 seconds and
+is the first wall an abuser hits, before the per-address and daily limits.
+
 ## Known limitation
 
-The capture page is a public URL with no WAF or rate limiting beyond reserved
-concurrency and the daily cap. That is acceptable for a prototype; a product
-would put CloudFront with a rate rule in front of it.
+There is no WAF. A product would add one, or CloudFront with a rate rule, in
+front of the API.
