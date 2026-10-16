@@ -255,3 +255,29 @@ show which version of a file was pasted.
 but not where a developer looks: the `GetObject` API reference and the error
 message itself. The message could say "the object may not exist; without
 s3:ListBucket, S3 cannot distinguish a missing key from a forbidden one".
+
+
+## 9. The build silently rewrites `manifest.toml`
+
+**Severity: Low — confusing, not blocking.**
+
+**Task:** Build the app with `react-native build-vega` after adding
+`@amazon-devices/react-native-w3cmedia`.
+
+**Steps:** Commit `manifest.toml` with the `w3cmedia_2` module declared, build,
+run `git status`.
+
+**Expected:** Either the build fails validation because two transitive modules
+are missing from the manifest, or it links them without touching my file.
+
+**Actual:** The build appends `[[needs.module]]` entries for
+`kepler_media_controls_1` and `keplermediadescriptor_1` to the committed
+`manifest.toml`, so the working tree is dirty after every build and the diff
+looks like an accidental edit. Nothing in the build output says it did this.
+
+**Workaround:** Declare the two modules in the committed manifest (this
+repository now does), so the rewrite is a no-op.
+
+**Suggestion:** Print one line when autolinking adds a module to the manifest,
+and point at the `kepler-compatibility.json` it took the id from. Better still,
+offer a `--check` mode that fails instead of writing, for CI.

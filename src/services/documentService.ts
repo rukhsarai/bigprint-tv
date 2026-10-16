@@ -106,6 +106,15 @@ type ResultResponse = {
 
 const NO_NETWORK =
   'The TV cannot reach the internet. Please check the connection.';
+/** The backend answered, but refused us: a setup problem, not a network one. */
+const refused = (status: number) =>
+  `The reading service refused this TV (error ${status}). Please tell the person who set it up.`;
+
+class RefusedError extends Error {
+  constructor(readonly status: number) {
+    super(`refused ${status}`);
+  }
+}
 
 /** Renew this long before the backend would expire the session, in seconds. */
 const RENEW_MARGIN_SECONDS = 10 * 60;
@@ -158,6 +167,9 @@ export const createRemoteDocumentService = (
       const startSession = async () => {
         try {
           const res = await fetchImpl(`${base}/session`, {method: 'POST'});
+          if (res.status === 401 || res.status === 403) {
+            throw new RefusedError(res.status);
+          }
           const body = (await res.json()) as SessionResponse;
           if (!res.ok || !body.ok) {
             throw new Error(body.message || 'session');
@@ -176,11 +188,11 @@ export const createRemoteDocumentService = (
             expiresAt: body.expiresAt,
           });
           schedule(poll, pollIntervalMs);
-        } catch {
+        } catch (e) {
           if (!active) {
             return;
           }
-          listener.onError(NO_NETWORK);
+          listener.onError(e instanceof RefusedError ? refused(e.status) : NO_NETWORK);
           // Keep trying quietly; the error clears when a session arrives.
           schedule(startSession, 10000);
         }

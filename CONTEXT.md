@@ -65,6 +65,14 @@ Judging criteria: Tech Implementation, Design, Potential Impact, Quality of Idea
 
 ### Unverified
 
+- **Virtual device, 16 October:** this branch builds, installs and launches on
+  the x86_64 virtual device (cold launch under a second), D-pad input works,
+  and the whole pairing → processing → document flow runs against the built-in
+  mock. Against the real backend the pairing screen stopped at an error: the
+  capture function's public URL answered 403 to every caller although the
+  function, URL and policy are configured correctly (see `AWS_SETUP.md`,
+  "Function URL answers 403 to everyone"). The audio services cannot be bound
+  on the virtual device, so read-aloud still needs real hardware.
 - **Nothing has been run on a physical Fire TV**, and VoiceView has never been
   run against it. For an accessibility product that is a real gap — the markup
   is correct by construction, not confirmed by ear.

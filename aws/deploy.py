@@ -141,6 +141,37 @@ def ensure_url(name: str) -> str:
     return url
 
 
+def check_url(name: str, url: str) -> bool:
+    """A function URL can be configured correctly and still answer 403 to the
+    public (an organisation guardrail, or a URL created as AWS_IAM). Only an
+    anonymous request proves it works, so make one."""
+    import urllib.error
+    import urllib.request
+    try:
+        policy = json.loads(lam.get_policy(FunctionName=name)["Policy"])
+        public = [s for s in policy.get("Statement", [])
+                  if s.get("Action") == "lambda:InvokeFunctionUrl" and s.get("Principal") in ("*", {"AWS": "*"})]
+        print(f"  resource policy: public URL statement {'present' if public else 'MISSING'}")
+    except ClientError as e:
+        print(f"  resource policy: could not read ({e.response['Error']['Code']})")
+    auth = lam.get_function_url_config(FunctionName=name).get("AuthType")
+    print(f"  URL auth type: {auth}")
+    try:
+        with urllib.request.urlopen(url.rstrip("/") + "/health", timeout=10) as r:
+            print(f"  anonymous GET /health -> {r.status}")
+            return True
+    except urllib.error.HTTPError as e:
+        print(f"  anonymous GET /health -> {e.code} {e.read(120)!r}")
+        if e.code == 403:
+            print("  403 for an anonymous caller, with the statement present and AuthType NONE, means\n"
+                  "  something above this function refuses public URLs. See AWS_SETUP.md,\n"
+                  "  'Function URL answers 403 to everyone'.")
+        return False
+    except Exception as e:  # noqa: BLE001 - a diagnostic, not a control path
+        print(f"  anonymous GET /health failed: {e}")
+        return False
+
+
 def ensure_no_retries(name: str):
     """A timed-out read must not be re-run twice more at full price."""
     try:
@@ -213,6 +244,9 @@ def main():
     ensure_lifecycle()
     print()
     print("Capture URL:", url)
+    reachable = check_url("bigprint-tv-capture", url)
+    if not reachable:
+        print("The TV will show 'The reading service refused this TV' until this is fixed.")
     print("Put it in src/config.ts as CAPTURE_BASE_URL (without the trailing slash).")
     print(json.dumps({"capture": capture_arn, "process": process_arn}, indent=1))
 

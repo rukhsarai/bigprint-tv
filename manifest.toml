@@ -26,9 +26,17 @@ id = "/com.amazon.kepler.svg_3@ISVG_0"
 [[needs.module]]
 id = "/com.amazon.kepler.async_storage__async_storage_2@IAsyncStorage__AsyncStorage_1"
 
-# Read-aloud audio (W3C media AudioPlayer).
+# Read-aloud audio (W3C media AudioPlayer) and the two modules it depends on.
+# The build's autolinking appends these two if they are missing, which left
+# the working tree dirty after every build; declaring them keeps it clean.
 [[needs.module]]
 id = "/com.amazon.kepler.w3cmedia_2@IW3cmedia_3"
+
+[[needs.module]]
+id = "/com.amazon.kepler.kepler_media_controls_1@IKeplerMediaControls_0"
+
+[[needs.module]]
+id = "/com.amazon.kepler.keplermediadescriptor_1@IKeplermediadescriptor_1"
 
 
 

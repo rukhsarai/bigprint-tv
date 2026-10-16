@@ -115,6 +115,18 @@ describe('createRemoteDocumentService', () => {
     unsubscribe();
   });
 
+  it('says the backend refused it when the URL answers 403, not that the network is down', async () => {
+    const {impl} = makeFetch([{status: 403, body: {Message: null}}]);
+    const l = listener();
+    const unsubscribe = createRemoteDocumentService('https://x.test', impl, 1000).subscribe(l);
+    await flush();
+    await flush();
+    expect(l.onError).toHaveBeenCalledWith(
+      'The reading service refused this TV (error 403). Please tell the person who set it up.',
+    );
+    unsubscribe();
+  });
+
   it('starts a new session when the backend has forgotten this one', async () => {
     const {impl, calls} = makeFetch([
       {body: session},

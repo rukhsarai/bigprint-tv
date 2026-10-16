@@ -74,6 +74,15 @@
         "logs:FilterLogEvents"
       ],
       "Resource": "arn:aws:logs:us-east-1:236605144361:log-group:/aws/lambda/bigprint-tv-*"
+    },
+    {
+      "Sid": "ListFunctions",
+      "Effect": "Allow",
+      "Action": [
+        "lambda:ListFunctions",
+        "lambda:ListFunctionUrlConfigs"
+      ],
+      "Resource": "*"
     }
   ]
 }
