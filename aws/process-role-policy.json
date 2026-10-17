@@ -14,10 +14,10 @@
       "Resource": "arn:aws:s3:::bigprint-tv-dev-ru22/results/*"
     },
     {
-      "Sid": "ReadOwnStatus",
+      "Sid": "ReadStatusAndDocuments",
       "Effect": "Allow",
       "Action": "s3:GetObject",
-      "Resource": "arn:aws:s3:::bigprint-tv-dev-ru22/results/*/status.json"
+      "Resource": "arn:aws:s3:::bigprint-tv-dev-ru22/results/*"
     },
     {
       "Sid": "DailyCapCounter",

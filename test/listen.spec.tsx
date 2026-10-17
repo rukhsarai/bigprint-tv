@@ -1,87 +1,90 @@
 import {act, renderHook} from '@testing-library/react-native';
 
-import {useReadAloud} from '../src/hooks/useReadAloud';
 import {useIncomingDocument} from '../src/hooks/useIncomingDocument';
-import type {AudioPlayer, PlaybackHandlers} from '../src/services/audioPlayer';
-import {createMediaElementPlayer, type MediaElementLike} from '../src/services/audioPlayer';
-import type {DocumentListener} from '../src/services/documentService';
+import {useListen} from '../src/hooks/useListen';
+import {
+  createMediaElementPlayer,
+  type AudioPlayer,
+  type MediaElementLike,
+  type PlaybackHandlers,
+} from '../src/services/audioPlayer';
+import type {
+  DocumentListener,
+  DocumentService,
+  VoiceUpdate,
+} from '../src/services/documentService';
 import {sampleReceipt, sampleInvoice} from '../src/data/documents';
 
-const marks = [
-  {time: 0, type: 'word' as const, start: 0, end: 3, value: 'Pay'},
-  {time: 400, type: 'word' as const, start: 4, end: 10, value: '£84.60'},
-  {time: 1200, type: 'word' as const, start: 11, end: 14, value: 'now'},
-];
+/** The parts of a service useIncomingDocument does not use. */
+const noVoice = {canListen: () => false, requestVoice: () => () => {}};
 
-/** A player the test drives by hand. */
-const fakePlayer = () => {
-  let handlers: PlaybackHandlers | null = null;
-  const player: AudioPlayer & {handlers: () => PlaybackHandlers | null; urls: string[]} = {
-    urls: [],
-    handlers: () => handlers,
-    play: jest.fn((url: string, h: PlaybackHandlers) => {
-      player.urls.push(url);
-      handlers = h;
-    }),
-    stop: jest.fn(() => {
-      handlers = null;
-    }),
+describe('useListen', () => {
+  const setup = () => {
+    let handlers: PlaybackHandlers | null = null;
+    let update: ((u: VoiceUpdate) => void) | null = null;
+    const cancel = jest.fn();
+    const player: AudioPlayer = {
+      play: jest.fn((_url: string, h: PlaybackHandlers) => {
+        handlers = h;
+      }),
+      pause: jest.fn(),
+      resume: jest.fn(),
+      stop: jest.fn(),
+    };
+    const service: DocumentService = {
+      subscribe: () => () => {},
+      canListen: () => true,
+      requestVoice: jest.fn((_d, onUpdate) => {
+        update = onUpdate;
+        return cancel;
+      }),
+    };
+    const hook = renderHook(() => useListen(player, service, sampleReceipt));
+    return {
+      hook,
+      player,
+      service,
+      cancel,
+      handlers: () => handlers!,
+      voice: (u: VoiceUpdate) => act(() => update!(u)),
+    };
   };
-  return player;
-};
 
-describe('useReadAloud with audio', () => {
-  it('follows the audio position and stops when it ends', () => {
-    const player = fakePlayer();
-    const {result} = renderHook(() => useReadAloud(player));
+  it('pressing again while the voice is being made cancels the wait', () => {
+    const {hook, cancel, voice, player} = setup();
+    act(() => hook.result.current.press());
+    expect(hook.result.current.state).toBe('preparing');
+    act(() => hook.result.current.press());
+    expect(hook.result.current.state).toBe('idle');
+    expect(cancel).toHaveBeenCalled();
+    // A late answer to the cancelled request plays nothing.
+    voice({state: 'ready', urls: ['https://x/0']});
+    expect(player.play).not.toHaveBeenCalled();
+  });
 
-    act(() => result.current.toggle(2, 'Pay £84.60 now', {marks, audioUrl: 'https://x/audio'}));
-    expect(player.urls).toEqual(['https://x/audio']);
-    expect(result.current.readingLine).toBe(2);
-    expect(result.current.hasAudio).toBe(true);
-    expect(result.current.wordIndex).toBe(0);
+  it('stops, rather than going on to the next part, when Alexa takes the speaker', () => {
+    const {hook, voice, handlers, player} = setup();
+    act(() => hook.result.current.press());
+    voice({state: 'ready', urls: ['https://x/0', 'https://x/1']});
+    act(() => handlers().onInterrupted!());
+    expect(hook.result.current.state).toBe('idle');
+    expect(player.play).toHaveBeenCalledTimes(1);
+  });
 
-    act(() => player.handlers()!.onTime(450));
-    expect(result.current.wordIndex).toBe(1);
-    act(() => player.handlers()!.onTime(1300));
-    expect(result.current.wordIndex).toBe(2);
+  it('says the voice is unavailable when it will not play', () => {
+    const {hook, voice, handlers} = setup();
+    act(() => hook.result.current.press());
+    voice({state: 'ready', urls: ['https://x/0']});
+    act(() => handlers().onError('404'));
+    expect(hook.result.current.state).toBe('unavailable');
+  });
 
-    act(() => player.handlers()!.onEnded());
-    expect(result.current.readingLine).toBeNull();
+  it('stops the voice when the screen goes away', () => {
+    const {hook, voice, player} = setup();
+    act(() => hook.result.current.press());
+    voice({state: 'ready', urls: ['https://x/0']});
+    hook.unmount();
     expect(player.stop).toHaveBeenCalled();
-  });
-
-  it('pressing the same line again stops it', () => {
-    const player = fakePlayer();
-    const {result} = renderHook(() => useReadAloud(player));
-    act(() => result.current.toggle(0, 'Pay £84.60 now', {marks, audioUrl: 'https://x/audio'}));
-    act(() => result.current.toggle(0, 'Pay £84.60 now', {marks, audioUrl: 'https://x/audio'}));
-    expect(result.current.readingLine).toBeNull();
-  });
-
-  it('falls back to the silent highlight when audio fails', () => {
-    jest.useFakeTimers();
-    const player = fakePlayer();
-    const {result} = renderHook(() => useReadAloud(player));
-    act(() => result.current.toggle(0, 'Pay £84.60 now', {marks, audioUrl: 'https://x/audio'}));
-    act(() => player.handlers()!.onError('no codec'));
-    expect(result.current.hasAudio).toBe(false);
-    expect(result.current.readingLine).toBe(0);
-    act(() => {
-      jest.advanceTimersByTime(500);
-    });
-    expect(result.current.wordIndex).toBe(1);
-    jest.useRealTimers();
-  });
-
-  it('highlights silently when there is no player', () => {
-    jest.useFakeTimers();
-    const {result} = renderHook(() => useReadAloud(null));
-    act(() => result.current.toggle(0, 'Please pay by 28 October 2026.'));
-    expect(result.current.readingLine).toBe(0);
-    expect(result.current.hasAudio).toBe(false);
-    expect(result.current.marks.length).toBe(6);
-    jest.useRealTimers();
   });
 });
 
@@ -123,6 +126,18 @@ describe('createMediaElementPlayer', () => {
     el.currentTime = 0.42;
     jest.advanceTimersByTime(60);
     expect(onTime).toHaveBeenLastCalledWith(420);
+    // Paused, the clock stands still and the stall watchdog stays quiet.
+    player.pause();
+    await settle();
+    expect(el.pause).toHaveBeenCalledTimes(1);
+    const calls = onTime.mock.calls.length;
+    jest.advanceTimersByTime(5000);
+    expect(onTime.mock.calls.length).toBe(calls);
+    player.resume();
+    await settle();
+    expect(el.play).toHaveBeenCalledTimes(2);
+    jest.advanceTimersByTime(60);
+    expect(onTime.mock.calls.length).toBeGreaterThan(calls);
     el.fire('ended');
     expect(onEnded).toHaveBeenCalled();
     // Ending on its own does not pause; an explicit stop does.
@@ -137,7 +152,11 @@ describe('createMediaElementPlayer', () => {
       throw new Error('no media');
     });
     const onError = jest.fn();
-    player.play('https://x/a.mp3', {onTime: jest.fn(), onEnded: jest.fn(), onError});
+    player.play('https://x/a.mp3', {
+      onTime: jest.fn(),
+      onEnded: jest.fn(),
+      onError,
+    });
     await settle();
     expect(onError).toHaveBeenCalled();
   });
@@ -155,7 +174,11 @@ describe('createMediaElementPlayer', () => {
     player.stop();
     await settle();
     expect(el.play).not.toHaveBeenCalled();
-    player.play('https://x/2.mp3', {onTime: jest.fn(), onEnded: jest.fn(), onError: jest.fn()});
+    player.play('https://x/2.mp3', {
+      onTime: jest.fn(),
+      onEnded: jest.fn(),
+      onError: jest.fn(),
+    });
     await settle();
     expect(el.src).toBe('https://x/2.mp3');
     expect(created).toBe(1);
@@ -164,14 +187,14 @@ describe('createMediaElementPlayer', () => {
 });
 
 describe('useIncomingDocument', () => {
-  it('holds a second document until the reader presses Back', () => {
+  it('holds a second document until the reader presses Next photo', () => {
     let l: DocumentListener | null = null;
     const service = {
       subscribe: (listener: DocumentListener) => {
         l = listener;
         return () => {};
       },
-      audioUrl: () => null,
+      ...noVoice,
     };
     const {result} = renderHook(() => useIncomingDocument(service));
     expect(result.current.status).toBe('connecting');
@@ -191,10 +214,13 @@ describe('useIncomingDocument', () => {
     act(() => l!.onError('ignored while reading'));
     expect(result.current.document).toBe(sampleReceipt);
     expect(result.current.error).toBeNull();
+    // ...but the Next photo button can say it is ready.
+    expect(result.current.nextReady).toBe(true);
 
     act(() => result.current.reset());
     expect(result.current.status).toBe('arrived');
     expect(result.current.document).toBe(sampleInvoice);
+    expect(result.current.nextReady).toBe(false);
 
     act(() => result.current.reset());
     expect(result.current.status).toBe('waiting');
@@ -209,11 +235,17 @@ describe('createMediaElementPlayer robustness', () => {
     }
   };
 
-  it('gives up on an initialise that never answers, so the line is not a dead button', async () => {
+  it('gives up on an initialise that never answers, so Listen is not left saying it plays', async () => {
     jest.useFakeTimers();
-    const player = createMediaElementPlayer(() => new Promise<MediaElementLike>(() => {}));
+    const player = createMediaElementPlayer(
+      () => new Promise<MediaElementLike>(() => {}),
+    );
     const onError = jest.fn();
-    player.play('https://x/a.mp3', {onTime: jest.fn(), onEnded: jest.fn(), onError});
+    player.play('https://x/a.mp3', {
+      onTime: jest.fn(),
+      onEnded: jest.fn(),
+      onError,
+    });
     await settle();
     expect(onError).not.toHaveBeenCalled();
     jest.advanceTimersByTime(4100);
@@ -251,7 +283,7 @@ describe('createMediaElementPlayer robustness', () => {
     jest.useRealTimers();
   });
 
-  it('treats losing the speaker to Alexa as the end of the line', async () => {
+  it('treats losing the speaker to Alexa as an interruption, not the end', async () => {
     jest.useFakeTimers();
     const listeners: Record<string, () => void> = {};
     const el: MediaElementLike = {
@@ -268,12 +300,20 @@ describe('createMediaElementPlayer robustness', () => {
     };
     const player = createMediaElementPlayer(() => el);
     const onEnded = jest.fn();
-    player.play('https://x/a.mp3', {onTime: jest.fn(), onEnded, onError: jest.fn()});
+    const onInterrupted = jest.fn();
+    player.play('https://x/a.mp3', {
+      onTime: jest.fn(),
+      onEnded,
+      onError: jest.fn(),
+      onInterrupted,
+    });
     await settle();
     el.currentTime = 1.2;
     jest.advanceTimersByTime(100);
     listeners.audiofocuslost();
-    expect(onEnded).toHaveBeenCalledTimes(1);
+    // A story must not carry on to its next part over Alexa.
+    expect(onInterrupted).toHaveBeenCalledTimes(1);
+    expect(onEnded).not.toHaveBeenCalled();
     jest.useRealTimers();
   });
 });
@@ -286,15 +326,17 @@ describe('useIncomingDocument late events', () => {
         l = listener;
         return () => {};
       },
-      audioUrl: () => null,
+      ...noVoice,
     };
     return {service, listener: () => l!};
   };
 
-  it('surfaces a failed second photo after Back instead of losing it', () => {
+  it('surfaces a failed second photo after Next photo instead of losing it', () => {
     const {service, listener} = makeService();
     const {result} = renderHook(() => useIncomingDocument(service));
-    act(() => listener().onSession({code: '482134', captureUrl: 'u', expiresAt: 1}));
+    act(() =>
+      listener().onSession({code: '482134', captureUrl: 'u', expiresAt: 1}),
+    );
     act(() => listener().onDocument(sampleReceipt));
     act(() => listener().onProcessing());
     act(() => listener().onError('Too dark.'));
@@ -304,10 +346,12 @@ describe('useIncomingDocument late events', () => {
     expect(result.current.error).toBe('Too dark.');
   });
 
-  it('shows "reading" after Back when the next page is still being read', () => {
+  it('shows "reading" after Next photo when the next page is still being read', () => {
     const {service, listener} = makeService();
     const {result} = renderHook(() => useIncomingDocument(service));
-    act(() => listener().onSession({code: '482134', captureUrl: 'u', expiresAt: 1}));
+    act(() =>
+      listener().onSession({code: '482134', captureUrl: 'u', expiresAt: 1}),
+    );
     act(() => listener().onDocument(sampleReceipt));
     act(() => listener().onProcessing());
     act(() => result.current.reset());
@@ -317,10 +361,14 @@ describe('useIncomingDocument late events', () => {
   it('a renewed session does not clear an error the user has not seen', () => {
     const {service, listener} = makeService();
     const {result} = renderHook(() => useIncomingDocument(service));
-    act(() => listener().onSession({code: '482134', captureUrl: 'u', expiresAt: 1}));
+    act(() =>
+      listener().onSession({code: '482134', captureUrl: 'u', expiresAt: 1}),
+    );
     act(() => listener().onError('Too dark.'));
     expect(result.current.status).toBe('error');
-    act(() => listener().onSession({code: '900001', captureUrl: 'u2', expiresAt: 2}));
+    act(() =>
+      listener().onSession({code: '900001', captureUrl: 'u2', expiresAt: 2}),
+    );
     // A fresh code means the user can try again; the screen goes back to waiting.
     expect(result.current.status).toBe('waiting');
     expect(result.current.session?.code).toBe('900001');

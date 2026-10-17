@@ -9,8 +9,8 @@
  * design canvas ("Colour research", "Three themes").
  *
  * Rules every theme keeps, which the screens rely on:
- * - Letters never change colour when a line is focused or read. Focus is a
- *   thick ring around the line; the spoken word gets a bar underneath.
+ * - Letters never change colour when a line is focused. Focus is a thick
+ *   ring around the line.
  * - `focus` is used for focus and nothing else, so it always means "you are
  *   here".
  * - Problems are panels with an icon and a first word, never colour alone.
@@ -38,10 +38,6 @@ export type Colours = {
   focusFill: string;
   focusText: string;
   focusEdge: string;
-
-  /** Bar under the word being spoken. */
-  spokenBar: string;
-  spokenText: string;
 
   /** Edge and icon of a Problem or Check panel. */
   attention: string;
@@ -83,8 +79,6 @@ const dark: Colours = {
   focusFill: '#FFD400',
   focusText: '#000000',
   focusEdge: '#FFFFFF',
-  spokenBar: '#A8D1FF',
-  spokenText: '#FFFFFF',
   attention: '#FF9A3C',
   attentionWord: '#FFFFFF',
   panelFill: '#000000',
@@ -118,8 +112,6 @@ const light: Colours = {
   focusFill: '#111111',
   focusText: '#FFFFFF',
   focusEdge: '#111111',
-  spokenBar: '#0B3D91',
-  spokenText: '#111111',
   attention: '#7A2C00',
   attentionWord: '#7A2C00',
   panelFill: '#FFFFFF',
@@ -151,8 +143,6 @@ const yellow: Colours = {
   focusFill: '#FFFFFF',
   focusText: '#000000',
   focusEdge: '#FFFFFF',
-  spokenBar: '#A8D1FF',
-  spokenText: '#FFFFFF',
   attention: '#FF9A3C',
   attentionWord: '#FFFFFF',
   panelFill: '#000000',

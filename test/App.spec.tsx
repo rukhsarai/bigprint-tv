@@ -25,7 +25,8 @@ const neverDelivers = {
     });
     return () => {};
   },
-  audioUrl: () => null,
+  canListen: () => false,
+  requestVoice: () => () => {},
 };
 
 describe('App', () => {
@@ -70,7 +71,7 @@ describe('App', () => {
   });
 
   it('shows a placeholder until the backend issues a code', async () => {
-    render(<App service={{subscribe: () => () => {}, audioUrl: () => null}} />);
+    render(<App service={{subscribe: () => () => {}, canListen: () => false, requestVoice: () => () => {}}} />);
     await settled();
     expect(screen.getByTestId('qr-placeholder')).toBeTruthy();
     expect(screen.getByTestId('pairing-connecting')).toBeTruthy();

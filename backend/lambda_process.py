@@ -1,18 +1,30 @@
 """
 BigPrint TV — processing function.
 
-Triggered by S3 when the capture function stores a photo under uploads/.
-Runs the reading pipeline, makes the audio, and leaves the result where the
-capture function can hand it to the TV:
+Triggered by S3, for two kinds of work:
 
-    results/<sid>/doc-<time>-<id>.json       the document, with word timings
-    results/<sid>/doc-<time>-<id>/line-N.mp3 one MP3 per line
-    results/<sid>/status.json                processing | done | error
+    uploads/<sid>/<upload>.jpg    a photo the capture function accepted:
+                                  read it and publish the text
+    voice/<sid>/<doc>.json        someone pressed Listen: read the letter
+                                  aloud, once
 
-This function has no public endpoint. Its only input is a photo that the
+and leaves the result where the capture function can hand it to the TV:
+
+    results/<sid>/doc-<time>-<id>.json        the document
+    results/<sid>/status.json                 processing | done | error
+    results/<sid>/doc-<time>-<id>/voice.json  making | ready (parts: N) | none
+    results/<sid>/doc-<time>-<id>/story-N.mp3 the letter read aloud, in one
+                                              part or a few
+
+Reading on the TV is the main thing and the voice is optional, so the text is
+all a photo pays for. Most letters are read, not heard; the voice is made
+only when someone asks for it, then kept for the rest of the day.
+
+This function has no public endpoint. Its only inputs are objects that the
 capture function already accepted, and a daily cap stops a flood of uploads
 from running up the bill. The cap is spent only once a photo has actually
-been read, so garbage uploads cannot use up real readers' budget.
+been read, so garbage uploads cannot use up real readers' budget. A voice is
+claimed once per letter by the capture function, so it cannot be bought twice.
 """
 
 from __future__ import annotations
@@ -29,7 +41,7 @@ import boto3
 from botocore.exceptions import ClientError
 
 from pipeline import Pipeline, to_app_json
-from speech import Speech
+from speech import Speech, story_text
 
 BUCKET = os.environ["BUCKET"]
 DAILY_CAP = int(os.environ.get("DAILY_CAP", "200"))
@@ -40,6 +52,7 @@ _pipeline: Pipeline | None = None
 _speech: Speech | None = None
 
 KEY_RE = re.compile(r"^uploads/([0-9a-f]{32})/([0-9]{10}-[0-9a-f]{12})\.jpg$")
+VOICE_KEY_RE = re.compile(r"^voice/([0-9a-f]{32})/(doc-[0-9]{10}-[0-9a-f]{12})\.json$")
 
 FRIENDLY_ERROR = "We could not read that photo. Please try again in better light."
 CAP_ERROR = "The service is very busy today. Please try again tomorrow."
@@ -106,13 +119,14 @@ def _spend_cap():
 
 
 def process(sid: str, upload_id: str, key: str):
-    global _pipeline, _speech
+    global _pipeline
 
     # Lambda retries an async invocation on failure or timeout; never pay twice.
     status, _ = _get_json(f"results/{sid}/status.json")
-    if status and status.get("uploadId") == upload_id and status.get("state") in ("done", "error"):
-        print(f"already handled {upload_id}, skipping")
-        return
+    if status and status.get("uploadId") == upload_id:
+        if status.get("state") in ("done", "error"):
+            print(f"already handled {upload_id}, skipping")
+            return
 
     if _cap_reached():
         print(f"daily cap reached, refusing {key}")
@@ -120,7 +134,6 @@ def process(sid: str, upload_id: str, key: str):
         return
 
     _pipeline = _pipeline or Pipeline(rewrite_with_image=REWRITE_WITH_IMAGE)
-    _speech = _speech or Speech()
 
     image = s3.get_object(Bucket=BUCKET, Key=key)["Body"].read()
     doc_id = f"doc-{int(time.time())}-{uuid.uuid4().hex[:12]}"
@@ -139,35 +152,71 @@ def process(sid: str, upload_id: str, key: str):
         _status(sid, "error", uploadId=upload_id, message=FRIENDLY_ERROR)
         return
 
-    audio = _speech.lines(doc.lines)
-    speech = []
-    for n, a in enumerate(audio):
-        if a is None:
-            speech.append(None)
-            continue
-        s3.put_object(Bucket=BUCKET, Key=f"results/{sid}/{doc_id}/line-{n}.mp3",
-                      Body=a.mp3, ContentType="audio/mpeg")
-        speech.append({"marks": a.marks, "durationMs": a.durationMs})
-
     payload = to_app_json(doc)
     payload["createdAt"] = int(time.time())
-    payload["speech"] = speech
     _put_json(f"results/{sid}/{doc_id}.json", payload)
     _status(sid, "done", uploadId=upload_id, docId=doc_id)
 
     d = doc.diagnostics
     print(json.dumps({
-        "event": "processed", "docId": doc_id, "seconds": round(time.time() - started, 1),
+        "event": "text", "docId": doc_id, "seconds": round(time.time() - started, 1),
         "ocrConfidence": d.get("ocrConfidence"), "ocrFeature": d.get("ocrFeature"),
-        "lines": len(doc.lines), "silentLines": sum(1 for s in speech if s is None),
+        "lines": len(doc.lines),
         "facts": d.get("factsFound"), "disputed": [x.get("field") for x in d.get("factsDisputed") or []],
         "dropped": d.get("linesDroppedByGuard"), "lowConfidence": doc.lowConfidence,
+    }))
+
+
+def make_voice(sid: str, doc_id: str):
+    """Read the whole letter aloud as one story. Nothing here may undo the
+    text on screen, so every failure ends as audio = none, never an error."""
+    global _speech
+    voice_key = f"results/{sid}/{doc_id}/voice.json"
+    claim, _ = _get_json(voice_key)
+    if not claim or claim.get("audio") != "making":
+        # Already made, or failed (a retry of this run): never pay twice.
+        print(f"voice for {doc_id} already handled, skipping")
+        return
+    payload, _ = _get_json(f"results/{sid}/{doc_id}.json")
+    if not payload:
+        _put_json(voice_key, {"audio": "none", "at": int(time.time())})
+        return
+    started = time.time()
+    # Only the full letter is read aloud. The main points and the exact words
+    # are for reading; a voice for them would be more Polly for little gain.
+    lines = payload.get("lines") or []
+    sentences = story_text(payload.get("kind") or "Letter", payload.get("sender"),
+                           lines, bool(payload.get("lowConfidence")))
+    parts: list[bytes] = []
+    try:
+        _speech = _speech or Speech()
+        parts = _speech.story(sentences)
+        for n, mp3 in enumerate(parts):
+            s3.put_object(Bucket=BUCKET, Key=f"results/{sid}/{doc_id}/story-{n}.mp3",
+                          Body=mp3, ContentType="audio/mpeg")
+    except Exception as e:  # noqa: BLE001 - the letter is on screen; the voice is optional
+        print(f"voice failed for {doc_id}: {type(e).__name__}: {str(e)[:200]}")
+        parts = []
+    _put_json(voice_key, {"audio": "ready" if parts else "none",
+                          "parts": len(parts), "at": int(time.time())})
+    print(json.dumps({
+        "event": "voice", "docId": doc_id, "seconds": round(time.time() - started, 1),
+        "characters": sum(len(x) for x in sentences), "parts": len(parts),
     }))
 
 
 def handler(event, _context):
     for record in event.get("Records", []):
         key = unquote_plus(record.get("s3", {}).get("object", {}).get("key", ""))
+        v = VOICE_KEY_RE.match(key)
+        if v:
+            try:
+                make_voice(v.group(1), v.group(2))
+            except Exception as e:  # noqa: BLE001 - the TV must not wait for ever
+                print(f"voice failed for {key}: {type(e).__name__}: {str(e)[:200]}")
+                _put_json(f"results/{v.group(1)}/{v.group(2)}/voice.json",
+                          {"audio": "none", "at": int(time.time())})
+            continue
         m = KEY_RE.match(key)
         if not m:
             print(f"ignoring unexpected key {key!r}")

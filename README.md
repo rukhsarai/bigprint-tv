@@ -3,8 +3,8 @@
 A Fire TV app that reads your post to you.
 
 Photograph a letter or bill with your phone. It appears on the television in
-very large print and is read aloud in a natural voice, one word highlighted at
-a time.
+very large print, to read at your own pace. If you would rather listen, one
+press reads the whole letter aloud in a natural voice.
 
 Built for people with age-related sight loss, who already own a large screen
 and know how to use a remote. The phone is only a camera, and it is usually
@@ -42,9 +42,11 @@ before changing anything.
 3. A second Lambda reads the page with Textract (layout and tables), rewrites
    it into short spoken sentences with Amazon Nova, pulls any amount due or
    deadline out with Textract's expense model, has Nova cross-check those
-   figures against the photo, and makes audio with word timings using Polly.
-4. The TV polls for the result and shows it in large print. Pressing a line
-   plays its audio with the spoken word highlighted.
+   figures against the photo, and writes the main points as well.
+4. The TV polls for the result and shows it in large print: the whole letter,
+   the main points, or the exact words. **Listen** asks for the letter to be
+   read aloud with Polly, made then and only then, so a letter nobody listens
+   to costs nothing to voice. **Next photo** goes on to the next page.
 
 Every number in the spoken text must exist in the OCR output, and a key figure
 is shown only when two independent readers agree. For this audience a

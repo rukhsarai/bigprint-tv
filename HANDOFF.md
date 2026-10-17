@@ -27,6 +27,36 @@ against the live backend).
   with 200 from outside AWS. No account-level guardrail investigation is
   needed.
 
+## Reading first, voice on request (this round, not yet on a device)
+
+From the test-report feedback: reading on the TV is the main thing, the
+word-by-word highlight read as blinking, and the voice must be cheap.
+
+- **Text first, faster.** The document is published the moment the rewrite
+  is done; the TV polls every second while a photo is being read (3 s
+  otherwise); key facts and the rewrite run in parallel; the phone sends a
+  smaller JPEG (quality 0.85).
+- **Three views**, one View button: Full letter, Main points (numbered, at
+  most six, through the same currency and numeric guards), Exact words
+  (headings bold, table rows marked ▸). The choice is remembered.
+- **Reading and listening are separate.** No word highlight, no speaker on a
+  line, lines do nothing when pressed. **Listen** reads the whole letter as
+  one story; the same button then says Pause, then Carry on listening.
+  Changing the view leaves it playing. Alexa taking the speaker stops it.
+- **Voice on request.** Nothing is sent to Polly until someone presses
+  Listen; it is made once per letter and kept for the day. Polly was $0.05
+  of $0.08 a letter; a letter read on screen is now about $0.02–0.03. See
+  `backend/README.md` → Cost. Deploying this needs the new S3 trigger on
+  `voice/` and the two role policies re-applied (`aws/deploy.py`,
+  `aws/*-role-policy.json`): the process role now reads `results/*`, and the
+  capture role writes `voice/*` and `results/*/voice.json`.
+- **Next photo** replaces Back. It shows the code again, or the page already
+  waiting ("Next photo is ready"); the remote's Back key does the same.
+
+Check on the device: Listen on a short and a long letter (two parts play
+back to back), Pause and Carry on listening, the "Getting the voice…" wait
+(estimated 3–6 s: S3 event, Polly, one poll; not measured), and Next photo with a page waiting.
+
 ## Corrections to earlier notes (read before trusting older claims)
 
 - An earlier version of this file said read-aloud audio "cannot be done on
@@ -73,16 +103,12 @@ Built from the design canvas after colour research (sources on its
   until one is chosen; the Colours button on both screens cycles them.
   `test/colours.spec.ts` checks every text pair at 7:1 and every mark at 3:1.
 - **Letters never flip.** A focused line keeps its colours and gets a 14 px
-  ring; the spoken word gets a 12 px bar underneath. The bar needs each
-  word laid out separately (nested text cannot draw a bar of set
-  thickness), so `DocumentView` splits lines into words; the space for the
-  bar is always reserved, so text never moves while it is read.
+  ring, whose space is always reserved, so text never moves.
 - **Yellow means focus** on Dark, and nothing else: key figures are white in
   grey-edged cards and the pairing code is white. Light has no yellow.
 - **Problems and checks are panels** with an icon and a first word.
-- **Read whole letter** plays the lines one after another (skipping blank
-  lines), scrolls the list to the line being read, and stops after the
-  last line, on Back, or on Stop reading. Pressing a line reads just that one.
+- **Listen** reads the whole letter aloud; see "Reading first, voice on
+  request" above, which replaced Read whole letter and the word bar.
 - **Design scale**, `src/theme/layout.ts`: every size is in 1920 × 1080
   design pixels, multiplied by `min(width / 1920, height / 1080)` of the
   window. On a 1920 × 1080 window nothing changes; on a 960 × 540 one the
@@ -95,14 +121,13 @@ Built from the design canvas after colour research (sources on its
 
 Differences from the canvas, on purpose: the reading-progress list shows two
 steps, not three, because the backend reports only "processing"; the QR is
-not dimmed while a photo is read, so a helper can still scan it; the spoken
-word is not bolded, because a bolder word is wider and would re-wrap the
-line as the voice moves; the offline panel has no Try again or Wi-Fi button,
+not dimmed while a photo is read, so a helper can still scan it; the offline
+panel has no Try again or Wi-Fi button,
 because nothing in the app can act on them yet (the TV already retries).
 
 Check on the device: the debug line's window size, that icons draw, that
-the 14 px ring and 12 px bar are visible from 3 m, first run then pairing,
-each look on both screens, Read whole letter with real audio, and every look
+the 14 px ring is visible from 3 m, first run then pairing, each look on
+both screens, Listen with real audio, and every look
 with Fire TV's High Contrast Text on.
 
 ## Open bug: pairing-screen instructions overflow (changed, not verified)
@@ -146,11 +171,12 @@ steps that fit one line each at 1x.
 
 - Real Fire TV hardware. Everything above is the x86_64 virtual device;
   `vega device list` never showed a physical device.
-- Audible confirmation and word-highlight sync with the voice.
-- Playing more than one line in a row; only one line's playback was logged.
+- Audible confirmation of Listen, Pause and Carry on listening, and a letter
+  long enough to play in two parts; only one line of the old per-line voice
+  was logged playing.
 - The pairing-screen layout at every text size (see the open bug above).
-- Remote Back key on a physical remote: Back on a document returns to the
-  pairing screen, Back on the pairing screen exits, and nothing else exits.
+- Remote Back key on a physical remote: Back on a document does what Next
+  photo does, Back on the pairing screen exits, and nothing else exits.
 - **VoiceView** (Fire TV screen reader) against both screens.
 - The phone page on an iPhone (HEIC → JPEG happens in Safari via canvas). The
   session's photos came from a phone whose model and browser were not

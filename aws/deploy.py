@@ -60,6 +60,8 @@ FUNCTIONS = {
         "handler": "lambda_process.handler",
         "role": f"arn:aws:iam::{ACCOUNT}:role/BigPrintTvProcessRole",
         "timeout": 120,
+        # Most of a read is spent waiting on Textract, Bedrock and Polly, so
+        # more memory would cost more without making it much faster.
         "memory": 1024,
         "concurrency": 3,
         "env": {"BUCKET": BUCKET, "DAILY_CAP": "200", "REWRITE_WITH_IMAGE": "0"},
@@ -255,6 +257,15 @@ def ensure_s3_trigger(process_arn: str):
                 {"Name": "prefix", "Value": "uploads/"},
                 {"Name": "suffix", "Value": ".jpg"},
             ]}},
+        }, {
+            # Someone pressed Listen: the voice is made only on request.
+            "Id": "bigprint-voice",
+            "LambdaFunctionArn": process_arn,
+            "Events": ["s3:ObjectCreated:*"],
+            "Filter": {"Key": {"FilterRules": [
+                {"Name": "prefix", "Value": "voice/"},
+                {"Name": "suffix", "Value": ".json"},
+            ]}},
         }]},
     )
 
@@ -266,7 +277,7 @@ def ensure_lifecycle():
             {"ID": f"expire-{p}", "Status": "Enabled", "Filter": {"Prefix": f"{p}/"},
              "Expiration": {"Days": 1},
              "AbortIncompleteMultipartUpload": {"DaysAfterInitiation": 1}}
-            for p in ("uploads", "results", "sessions", "counters", "ratelimit")
+            for p in ("uploads", "voice", "results", "sessions", "counters", "ratelimit")
         ]},
     )
 

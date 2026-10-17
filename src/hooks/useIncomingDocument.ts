@@ -18,7 +18,9 @@ export type IncomingDocument = {
   session: PairingSession | null;
   document: ScannedDocument | null;
   error: string | null;
-  /** Go back to waiting — used after reading one document, or after a failure. */
+  /** True when the next photo has already been read, so Next photo shows it. */
+  nextReady: boolean;
+  /** Go on to the next photo — shown at once if it is already here. */
   reset: () => void;
 };
 
@@ -34,7 +36,7 @@ type Held =
  * The subscription is torn down on unmount, so a late delivery can never push
  * a document onto a screen the user has left. Anything that happens while a
  * document is being read — a second page, a failed photo, "reading…" — is
- * held back and shown when the reader presses Back, so the page never changes
+ * held back and shown when the reader presses Next photo (or Back), so the page never changes
  * under them and nothing is silently lost.
  */
 export const useIncomingDocument = (
@@ -44,6 +46,7 @@ export const useIncomingDocument = (
   const [session, setSession] = useState<PairingSession | null>(null);
   const [document, setDocument] = useState<ScannedDocument | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [nextReady, setNextReady] = useState(false);
   const reading = useRef(false);
   const held = useRef<Held>(null);
 
@@ -59,7 +62,9 @@ export const useIncomingDocument = (
         if (!reading.current) {
           setError(null);
           setStatus((current) =>
-            current === 'connecting' || current === 'error' ? 'waiting' : current,
+            current === 'connecting' || current === 'error'
+              ? 'waiting'
+              : current,
           );
         }
       },
@@ -83,6 +88,7 @@ export const useIncomingDocument = (
         }
         if (reading.current) {
           held.current = {kind: 'document', document: incoming};
+          setNextReady(true);
           return;
         }
         reading.current = true;
@@ -115,6 +121,7 @@ export const useIncomingDocument = (
     reading.current = false;
     const next = held.current;
     held.current = null;
+    setNextReady(false);
     setError(null);
     if (next?.kind === 'document') {
       reading.current = true;
@@ -133,5 +140,5 @@ export const useIncomingDocument = (
     }
   }, []);
 
-  return {status, session, document, error, reset};
+  return {status, session, document, error, nextReady, reset};
 };

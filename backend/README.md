@@ -7,6 +7,7 @@ phone ──POST /upload──▶ HTTP API ──▶ capture Lambda ──▶ S3
                                                  │ (S3 event)
                                                  ▼
 TV ◀──GET /result────── capture Lambda ◀── S3 results/<sid>/… ◀── process Lambda
+TV ──POST /voice──────▶ capture Lambda ──▶ S3 voice/<sid>/… (S3 event) ──▶ │
 TV ◀──GET /audio─────── capture Lambda                               │
                                               Textract ◀─────────────┤
                                               Bedrock Nova ◀─────────┤
@@ -15,11 +16,11 @@ TV ◀──GET /audio─────── capture Lambda                      
 
 | File | What it is |
 |---|---|
-| `lambda_capture.py` | Behind the API, the only public surface. Issues pairing sessions, serves the phone page, accepts one JPEG, hands results and audio to the TV. Cannot call any AI service. |
+| `lambda_capture.py` | Behind the API, the only public surface. Issues pairing sessions, serves the phone page, accepts one JPEG, hands results to the TV, takes a request to read a letter aloud, and serves the audio. Cannot call any AI service. |
 | `capture_page.html` | The phone page. Downscales and re-encodes the photo as JPEG in the browser (this is also what makes iPhone HEIC work). |
-| `lambda_process.py` | Triggered by S3. Runs the pipeline, makes the audio, writes the result. No public endpoint. |
+| `lambda_process.py` | Triggered by S3. For a photo: runs the pipeline and writes the text. For a voice request: reads the letter aloud, once. No public endpoint. |
 | `pipeline.py` | photo → OCR with layout and tables → classify → key facts (cross-checked) → plain English → currency guard → numeric guard |
-| `speech.py` | Polly neural voice, one MP3 per line, with word timings for the highlight |
+| `speech.py` | Polly neural voice: the whole letter as one story, split into parts only past Polly's 3,000-character limit. No word timings. |
 | `tests/` | Unit tests for the pure parts: `python -m unittest discover backend/tests` |
 | `run_batch.py` | Runs the pipeline over every photo in the bucket and prints an accuracy report |
 | `gen_fixtures.py` | Regenerates `src/data/documents.ts` from the saved results in `fixtures/` |
@@ -111,8 +112,11 @@ the TV speaks: amounts, dates, times, references, phone numbers.
   camera, as the capture page insists on, is many times that resolution.
 - **Nothing wrong was shown without a warning on any blurry photo.** The
   warning fired on all four, and on the tax-invoice template.
-- **Audio: 0 silent lines in 11 documents.** Upload to spoken result took
-  13–49 seconds; Polly's two calls per line dominate on long receipts.
+- **Audio: 0 silent lines in 11 documents** (under the old per-line voice).
+  Upload to spoken result took 13–49 seconds; Polly's two calls per line
+  dominated on long receipts. The text no longer waits for the voice at all:
+  it is published as soon as the rewrite is done, and the voice is made only
+  when someone presses Listen.
 - **The photo cross-check vetoed five facts, and every veto was wrong.** Nova
   read "3/12/2016" as "3/27/2016" and "27/02/2025" as "17-02/02/2025", and
   once disagreed with a correct "$49.52"; Textract was right each time. So the
@@ -136,12 +140,22 @@ to a session and reading `results/<sid>/<docId>.json`.
 | OCR with layout and tables | Textract AnalyzeDocument | $0.019 |
 | Key figures (bills only) | Textract AnalyzeExpense | $0.01 |
 | Classify | Nova Lite | $0.0001 |
-| Rewrite | Nova Pro | $0.002 |
+| Rewrite (whole letter and main points, one call) | Nova Pro | $0.002 |
 | Cross-check figures against the photo | Nova Pro (image) | $0.002 |
-| Voice and word timings | Polly neural, ~1,500 characters × 2 | $0.05 |
 | Lambda, S3, logs | | < $0.001 |
-| **Bill** | | **≈ $0.08** |
-| **Letter** | | **≈ $0.07** |
+| **Bill, read on screen** | | **≈ $0.033** |
+| **Letter, read on screen** | | **≈ $0.023** |
+| Voice, only if someone presses Listen | Polly neural, ~1,500 characters, once | + $0.024 |
+
+The voice used to be made for every letter, with a second Polly call per line
+for word timings: $0.05 of the old $0.08. Now it is made on request, once per
+letter (claimed with a conditional write, so pressing Listen twice or on two
+TVs still makes one), with no timings, and kept for the day so listening
+again is free. A letter nobody listens to costs nothing to voice.
+
+If the voice still costs too much, `ENGINE = "standard"` in `speech.py` is a
+quarter of the price, but it sounds noticeably more robotic, which matters
+for this audience.
 
 Idle cost is a few cents a month of S3.
 

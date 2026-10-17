@@ -36,6 +36,16 @@ def render(name, why, d):
         for f in d.get("keyFacts", [])
     )
     lines = "".join(f"\n    {ts(l)}," for l in d["lines"])
+    summary = "".join(f"\n    {ts(l)}," for l in d.get("summary") or [])
+    exact = "".join(
+        f"\n    {{text: {ts(e['text'])}, kind: {ts(e['kind'])}}},"
+        for e in d.get("exact") or []
+    )
+    extra = ""
+    if summary:
+        extra += f"\n  summary: [{summary}\n  ],"
+    if exact:
+        extra += f"\n  exact: [{exact}\n  ],"
     return f"""
 /** {why}. */
 export const {name}: ScannedDocument = {{
@@ -44,7 +54,7 @@ export const {name}: ScannedDocument = {{
   keyFacts: [{facts}
   ],
   lines: [{lines}
-  ],
+  ],{extra}
   lowConfidence: {str(d['lowConfidence']).lower()},
 }};
 """

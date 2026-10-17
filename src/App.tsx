@@ -19,7 +19,7 @@ import {layout} from './theme/styles';
 type Props = {
   /** Injected in tests. Defaults to the real backend, or the mock when no URL is configured. */
   service?: DocumentService;
-  /** Injected in tests. Defaults to the platform audio player; null means silent highlighting. */
+  /** Injected in tests. Defaults to the platform audio player; null means no voice. */
   player?: AudioPlayer | null;
 };
 
@@ -48,7 +48,7 @@ const Screens = ({service, player}: Props) => {
 
   // Starts pairing straight away, even during the first-run choice, so the
   // code is ready by the time the viewer has picked a look.
-  const {status, session, document, error, reset} =
+  const {status, session, document, error, nextReady, reset} =
     useIncomingDocument(documentService);
 
   if (!restored) {
@@ -65,11 +65,14 @@ const Screens = ({service, player}: Props) => {
 
   if (status === 'arrived' && document) {
     return (
+      // Keyed by letter, so the next photo starts with its voice stopped.
       <DocumentView
+        key={document.id}
         document={document}
         player={audioPlayer}
-        audioUrl={(lineIndex) => documentService.audioUrl(document, lineIndex)}
-        onBack={reset}
+        service={documentService}
+        nextReady={nextReady}
+        onNext={reset}
       />
     );
   }

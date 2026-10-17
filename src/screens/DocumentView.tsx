@@ -1,4 +1,11 @@
-import React, {useCallback, useEffect, useRef, useState} from 'react';
+import React, {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 // Vega's components, not stock react-native: the Fire TV accessibility props
 // (accessibilityDescribedBy, accessibilityOrientationText) are declared here.
 import {
@@ -8,137 +15,160 @@ import {
   Text,
   TVFocusGuideView,
   View,
-  type LayoutChangeEvent,
 } from '@amazon-devices/react-native-kepler';
 
 import {useTextScale} from '../hooks/useTextScale';
-import {useReadAloud} from '../hooks/useReadAloud';
-import type {SpeechMark} from '../data/speechMarks';
-import type {ScannedDocument} from '../data/documents';
+import {useListen, type ListenState} from '../hooks/useListen';
+import {
+  VIEW_LABEL,
+  VIEW_ORDER,
+  nextView,
+  useDocumentViewChoice,
+  type DocumentViewName,
+} from '../hooks/useDocumentViewChoice';
+import type {ExactLine, ScannedDocument} from '../data/documents';
 import type {AudioPlayer} from '../services/audioPlayer';
+import type {DocumentService} from '../services/documentService';
 import {useColours} from '../theme/ColoursProvider';
 import {useDesignUnits, type TextType} from '../theme/layout';
+import {layout} from '../theme/styles';
 import type {Colours} from '../theme/colours';
 import {TvButton} from '../components/TvButton';
-import {SpeakerIcon, WarningIcon} from '../components/Icons';
-import {layout} from '../theme/styles';
+import {CameraIcon, SpeakerIcon, WarningIcon} from '../components/Icons';
 
 type Props = {
   document: ScannedDocument;
-  /** Null when the platform has no audio: lines are then highlighted silently. */
+  /** Null when the platform has no audio. */
   player: AudioPlayer | null;
-  /** Where a line's audio lives, or null when there is none. */
-  audioUrl: (lineIndex: number) => string | null;
-  onBack: () => void;
+  /** Makes the voice when someone asks to listen. */
+  service: DocumentService;
+  /** The next photo is already read and waiting. */
+  nextReady: boolean;
+  /** Go on to the next photo: the code to send one, or the one waiting. */
+  onNext: () => void;
 };
 
-export const DocumentView = ({document, player, audioUrl, onBack}: Props) => {
+const LISTEN_LABEL: Record<ListenState, string> = {
+  idle: 'Listen',
+  preparing: 'Getting the voice…',
+  playing: 'Pause',
+  paused: 'Carry on listening',
+  unavailable: 'No voice',
+};
+
+const LISTEN_SPOKEN: Record<ListenState, string> = {
+  idle: 'Listen to the whole letter read aloud.',
+  preparing: 'Getting the voice ready. Press to cancel.',
+  playing: 'Pause the voice.',
+  paused: 'Carry on listening from where it stopped.',
+  unavailable: 'The voice is not available for this letter.',
+};
+
+/**
+ * The letter in large print. Reading it on screen is the point: as the whole
+ * letter in plain English, as its main points, or as the exact words on the
+ * page. Listening is the other way in, for someone busy or tired: the whole
+ * letter read aloud, start to finish, while nothing on screen moves.
+ *
+ * Next photo goes on to the next page, so a pile of post can be read one
+ * after another without starting again.
+ */
+export const DocumentView = ({
+  document,
+  player,
+  service,
+  nextReady,
+  onNext,
+}: Props) => {
   const {scale, scaled, changeScale, canGoBigger, canGoSmaller} =
     useTextScale();
   const {colours, cycle} = useColours();
-  const {dp, type} = useDesignUnits();
+  const {dp, type, unit} = useDesignUnits();
+  const {view: savedView, setView} = useDocumentViewChoice();
   const t = (px: number) => type(scaled(px));
-  const {readingLine, wordIndex, marks, toggle, stop} = useReadAloud(player);
+  const listen = useListen(player, service, document);
+  const canListen = player !== null && service.canListen(document);
 
-  // "Read whole letter": when a line ends, the next one starts by itself.
-  const [continuous, setContinuous] = useState(false);
-  const scroller = useRef<React.ElementRef<typeof ScrollView>>(null);
-  const lineTops = useRef<number[]>([]);
-  const lastLine = useRef<number | null>(null);
-
-  const readLine = useCallback(
-    (index: number) =>
-      toggle(index, document.lines[index], {
-        marks: document.speech?.[index]?.marks,
-        audioUrl: audioUrl(index),
-      }),
-    [toggle, document, audioUrl],
+  // Older results have only the full letter; offer what this one has.
+  const offered = useMemo(
+    () =>
+      VIEW_ORDER.filter(
+        (name) =>
+          name === 'full' ||
+          (name === 'points' && (document.summary?.length ?? 0) > 0) ||
+          (name === 'exact' && (document.exact?.length ?? 0) > 0),
+      ),
+    [document],
   );
+  const view: DocumentViewName = offered.includes(savedView)
+    ? savedView
+    : 'full';
 
-  // Pressing a line reads just that line, and ends a whole-letter reading.
-  const pressLine = (index: number) => {
-    setContinuous(false);
-    readLine(index);
+  const shown: ExactLine[] = useMemo(() => {
+    if (view === 'exact') {
+      return document.exact ?? [];
+    }
+    const source = view === 'points' ? document.summary ?? [] : document.lines;
+    return source.map((text) => ({text, kind: 'text'}));
+  }, [document, view]);
+
+  const scroller = useRef<React.ElementRef<typeof ScrollView>>(null);
+
+  // The voice is the whole letter whichever view is on screen, so changing
+  // the view leaves it playing.
+  const changeView = () => {
+    scroller.current?.scrollTo({y: 0, animated: false});
+    setView(nextView(view, offered));
   };
 
-  const toggleWholeLetter = () => {
-    if (continuous) {
-      setContinuous(false);
-      stop();
-      return;
-    }
-    setContinuous(true);
-    // Already reading a line: carry on from it. Otherwise start at the top.
-    if (readingLine === null && document.lines.length > 0) {
-      readLine(0);
-    }
-  };
-
-  useEffect(() => {
-    const previous = lastLine.current;
-    lastLine.current = readingLine;
-    if (readingLine !== null) {
-      // Focus stays on the button, so the list will not follow by itself.
-      if (continuous) {
-        const top = lineTops.current[readingLine];
-        if (top !== undefined) {
-          scroller.current?.scrollTo({
-            y: Math.max(0, top - dp(8)),
-            animated: false,
-          });
-        }
-      }
-      return;
-    }
-    if (continuous && previous !== null) {
-      // Skip blank lines: a line with no words has nothing to play and would
-      // never end, which would stall the reading.
-      let next = previous + 1;
-      while (next < document.lines.length && !/\S/.test(document.lines[next])) {
-        next++;
-      }
-      if (next < document.lines.length) {
-        readLine(next);
-      } else {
-        setContinuous(false);
-      }
-    }
-  }, [readingLine, continuous, document.lines, readLine, dp]);
-
-  const handleBack = useCallback(() => {
-    setContinuous(false);
+  const {stop} = listen;
+  const handleNext = useCallback(() => {
     stop();
-    onBack();
-  }, [stop, onBack]);
+    onNext();
+  }, [stop, onNext]);
 
   // The remote's Back key must leave the document, not the app. Without a
   // listener Vega's default handler exits; returning true claims the press.
+  // It does what Next photo does.
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      handleBack();
+      handleNext();
       return true;
     });
     return () => sub.remove();
-  }, [handleBack]);
+  }, [handleNext]);
 
   // Screen reader focus follows input focus on Fire TV, so static text can
   // never be reached on its own. The key facts and any warning are linked to
   // the first line instead, so they are spoken when the reader enters the body.
-  const describedByIds = [
-    ...(document.lowConfidence ? ['read-warning'] : []),
-    ...document.keyFacts.map((_, index) => `fact-${index}`),
-  ];
+  const describedByIds = useMemo(
+    () => [
+      ...(document.lowConfidence ? ['read-warning'] : []),
+      ...document.keyFacts.map((_, index) => `fact-${index}`),
+    ],
+    [document],
+  );
 
-  const count = document.lines.length;
+  const count = shown.length;
   const position =
-    readingLine !== null
-      ? `Reading line ${readingLine + 1} of ${count}`
+    listen.state === 'playing'
+      ? 'Reading aloud'
+      : listen.state === 'paused'
+      ? 'Paused'
+      : listen.state === 'preparing'
+      ? 'Getting the voice ready…'
+      : view === 'exact'
+      ? `${count} lines as printed`
+      : view === 'points'
+      ? count === 1
+        ? '1 main point'
+        : `${count} main points`
       : count === 1
       ? '1 line'
       : `${count} lines`;
 
-  const lineType = t(30);
-  const bar = dp(Math.round(12 * scale));
+  const lineType = useMemo(() => type(scaled(30)), [type, scaled]);
+  const headingType = useMemo(() => type(scaled(36)), [type, scaled]);
 
   return (
     <View
@@ -153,8 +183,10 @@ export const DocumentView = ({document, player, audioUrl, onBack}: Props) => {
       accessibilityOrientationText={
         'Document view. Any important figures are listed at the top. ' +
         'Press up and down to move through the text one line at a time. ' +
-        'Press select to hear a line read aloud. ' +
-        'Read whole letter, text size and colour controls are at the bottom.'
+        'The view button switches between the full letter, the main points ' +
+        'and the exact words. Listen reads the whole letter aloud. ' +
+        'Next photo goes on to the next page. ' +
+        'Text size and colour controls are at the bottom.'
       }>
       <View style={layout.baselineRow}>
         <Text
@@ -173,8 +205,8 @@ export const DocumentView = ({document, player, audioUrl, onBack}: Props) => {
           </Text>
         )}
         <View style={layout.fill} />
-        {/* Not a live region: during a whole-letter reading it changes every
-            line, and VoiceView would talk over the voice reading the letter. */}
+        {/* Not a live region: VoiceView would talk over the voice reading
+            the letter. The Listen button says the same when focused. */}
         <Text
           style={[{color: colours.textSecondary}, type(24)]}
           testID="line-position">
@@ -248,35 +280,52 @@ export const DocumentView = ({document, player, audioUrl, onBack}: Props) => {
         contentContainerStyle={{paddingBottom: dp(16)}}
         showsVerticalScrollIndicator={false}>
         <TVFocusGuideView>
-          {document.lines.map((line, index) => (
+          {shown.map((line, index) => (
             <DocumentLine
-              key={index}
-              text={line}
-              textType={lineType}
-              bar={bar}
+              key={`${view}-${index}`}
+              index={index}
+              text={line.text}
+              kind={line.kind}
+              numbered={view === 'points'}
+              textType={line.kind === 'heading' ? headingType : lineType}
+              unit={unit}
               colours={colours}
-              dp={dp}
-              isSpoken={readingLine === index}
-              marks={readingLine === index ? marks : []}
-              wordIndex={readingLine === index ? wordIndex : -1}
-              onPress={() => pressLine(index)}
-              onLayout={(e) => {
-                lineTops.current[index] = e.nativeEvent.layout.y;
-              }}
               hasTVPreferredFocus={index === 0}
               describedBy={index === 0 ? describedByIds : undefined}
-              testID={`line-${index}`}
             />
           ))}
         </TVFocusGuideView>
       </ScrollView>
 
       <TVFocusGuideView style={[layout.rowWrap, {marginTop: dp(12)}]}>
+        {offered.length > 1 && (
+          <TvButton
+            label={`View: ${VIEW_LABEL[view]}`}
+            accessibilityLabel={`View, ${VIEW_LABEL[view]}. Press to change.`}
+            onPress={changeView}
+            testID="control-View"
+          />
+        )}
+        {canListen && (
+          <TvButton
+            label={LISTEN_LABEL[listen.state]}
+            accessibilityLabel={LISTEN_SPOKEN[listen.state]}
+            onPress={listen.press}
+            disabled={listen.state === 'unavailable'}
+            icon={(color, size) => <SpeakerIcon size={size} color={color} />}
+            testID="control-Listen"
+          />
+        )}
         <TvButton
-          label={continuous ? 'Stop reading' : 'Read whole letter'}
-          onPress={toggleWholeLetter}
-          icon={(color, size) => <SpeakerIcon size={size} color={color} />}
-          testID="control-Read whole letter"
+          label={nextReady ? 'Next photo is ready' : 'Next photo'}
+          accessibilityLabel={
+            nextReady
+              ? 'Next photo. It has been read and is ready to show.'
+              : 'Next photo. Send another page from your phone.'
+          }
+          onPress={handleNext}
+          icon={(color, size) => <CameraIcon size={size} color={color} />}
+          testID="control-Next photo"
         />
         <TvButton
           label="Bigger text"
@@ -296,7 +345,6 @@ export const DocumentView = ({document, player, audioUrl, onBack}: Props) => {
           onPress={cycle}
           testID="control-Colours"
         />
-        <TvButton label="Back" onPress={handleBack} testID="control-Back" />
         <Text
           style={[{color: colours.textSecondary, marginLeft: dp(8)}, type(24)]}>
           Text size {scale}x
@@ -307,158 +355,78 @@ export const DocumentView = ({document, player, audioUrl, onBack}: Props) => {
 };
 
 type DocumentLineProps = {
+  index: number;
   text: string;
+  kind: ExactLine['kind'];
+  /** Main points are numbered, so they read as a list. */
+  numbered: boolean;
   textType: TextType;
-  /** Thickness of the bar under the spoken word. */
-  bar: number;
+  unit: number;
   colours: Colours;
-  dp: (px: number) => number;
-  isSpoken: boolean;
-  marks: SpeechMark[];
-  wordIndex: number;
-  onPress: () => void;
-  onLayout: (e: LayoutChangeEvent) => void;
   hasTVPreferredFocus?: boolean;
   describedBy?: string[];
-  testID: string;
 };
 
 /**
- * One line of the letter. Focus is a thick ring round the line; the letters
- * keep the colours the viewer chose, because flipping a line to dark-on-light
- * where the reader is looking undoes the reason they chose a dark screen.
- * The ring's space is always reserved, so focus never moves the text.
+ * One line of the letter, for reading. Focus is a thick ring round the line;
+ * the letters keep the colours the viewer chose, because flipping a line to
+ * dark-on-light where the reader is looking undoes the reason they chose a
+ * dark screen. The ring's space is always reserved, so nothing moves.
+ *
+ * Memoised, so moving focus re-renders two lines, not the whole letter: at a
+ * large size that is what keeps a TV from stuttering.
  */
-const DocumentLine = ({
-  text,
-  textType,
-  bar,
-  colours,
-  dp,
-  isSpoken,
-  marks,
-  wordIndex,
-  onPress,
-  onLayout,
-  hasTVPreferredFocus,
-  describedBy,
-  testID,
-}: DocumentLineProps) => {
-  const [focused, setFocused] = useState(false);
-  const spoken = isSpoken ? marks[wordIndex] : undefined;
-  return (
-    <Pressable
-      accessible={true}
-      onPress={onPress}
-      onFocus={() => setFocused(true)}
-      onBlur={() => setFocused(false)}
-      onLayout={onLayout}
-      hasTVPreferredFocus={hasTVPreferredFocus}
-      // A line is pressable (it reads aloud), so it is a button, not text.
-      role="button"
-      aria-label={text}
-      accessibilityHint="Press select to hear this line read aloud"
-      accessibilityDescribedBy={describedBy}
-      testID={testID}
-      style={{
-        borderWidth: dp(14),
-        borderColor: focused ? colours.focus : colours.background,
-        borderRadius: dp(16),
-        paddingHorizontal: dp(16),
-        paddingTop: dp(4),
-        paddingBottom: dp(6),
-        backgroundColor: colours.background,
-      }}>
-      <LineWords
-        text={text}
-        spoken={spoken}
-        textType={textType}
-        bar={bar}
-        colours={colours}
-      />
-    </Pressable>
-  );
-};
-
-type Token = {text: string; start: number; end: number};
-
-/** Words with their character offsets, so speech marks can find them. */
-export const tokenize = (text: string): Token[] => {
-  const tokens: Token[] = [];
-  const re = /\S+/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(text)) !== null) {
-    tokens.push({text: m[0], start: m.index, end: m.index + m[0].length});
-  }
-  return tokens;
-};
-
-/**
- * Lays the line out word by word so the spoken word can carry a thick bar
- * underneath. Nested text cannot draw a bar of a chosen thickness, and a
- * filled box would flip the word's colours. Every word reserves the bar's
- * space, so the line never moves as the voice goes along. The offsets come
- * from the speech marks, so Polly's marks line up exactly, including
- * punctuation next to a word.
- */
-const LineWords = ({
-  text,
-  spoken,
-  textType,
-  bar,
-  colours,
-}: {
-  text: string;
-  spoken?: SpeechMark;
-  textType: TextType;
-  bar: number;
-  colours: Colours;
-}) => {
-  const gap = Math.round(textType.fontSize * 0.28);
-  const slot = {
-    borderBottomWidth: bar,
-    borderBottomColor: 'transparent',
-    paddingBottom: Math.max(1, Math.round(bar / 6)),
-  };
-  const ink = [{color: colours.text}, textType];
-  return (
-    <View style={layout.wrap}>
-      {tokenize(text).map((token, index) => {
-        const hit =
-          spoken !== undefined &&
-          token.start < spoken.end &&
-          spoken.start < token.end;
-        if (!hit) {
-          return (
-            <View key={index} style={[slot, {marginRight: gap}]}>
-              <Text style={ink}>{token.text}</Text>
-            </View>
-          );
-        }
-        const from = Math.max(spoken.start, token.start) - token.start;
-        const to = Math.min(spoken.end, token.end) - token.start;
-        return (
-          <View key={index} style={[layout.plainRow, {marginRight: gap}]}>
-            {from > 0 ? (
-              <View style={slot}>
-                <Text style={ink}>{token.text.slice(0, from)}</Text>
-              </View>
-            ) : null}
-            <View
-              style={[slot, {borderBottomColor: colours.spokenBar}]}
-              testID="spoken-word">
-              <Text style={[ink, {color: colours.spokenText}]}>
-                {token.text.slice(from, to)}
-              </Text>
-            </View>
-            {to < token.text.length ? (
-              <View style={slot}>
-                <Text style={ink}>{token.text.slice(to)}</Text>
-              </View>
-            ) : null}
-          </View>
-        );
-      })}
-    </View>
-  );
-};
+const DocumentLine = memo(
+  ({
+    index,
+    text,
+    kind,
+    numbered,
+    textType,
+    unit,
+    colours,
+    hasTVPreferredFocus,
+    describedBy,
+  }: DocumentLineProps) => {
+    const [focused, setFocused] = useState(false);
+    const dp = (px: number) => Math.round(px * unit);
+    const prefix = numbered ? `${index + 1}.  ` : kind === 'row' ? '▸ ' : '';
+    return (
+      // Pressable only so it can take focus: Up/Down steps through the
+      // letter and the screen reader reads each line. Pressing does nothing.
+      <Pressable
+        accessible={true}
+        focusable={true}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
+        hasTVPreferredFocus={hasTVPreferredFocus}
+        aria-label={`${prefix}${text}`}
+        accessibilityDescribedBy={describedBy}
+        testID={`line-${index}`}
+        style={[
+          layout.plainRow,
+          {
+            borderWidth: dp(14),
+            borderColor: focused ? colours.focus : colours.background,
+            borderRadius: dp(16),
+            paddingHorizontal: dp(28),
+            paddingTop: dp(kind === 'heading' ? 14 : 4),
+            paddingBottom: dp(6),
+            backgroundColor: colours.background,
+          },
+        ]}>
+        <Text
+          role={kind === 'heading' ? 'heading' : undefined}
+          style={[
+            layout.fill,
+            kind === 'heading' ? layout.bold : null,
+            {color: colours.text},
+            textType,
+          ]}>
+          {prefix}
+          {text}
+        </Text>
+      </Pressable>
+    );
+  },
+);

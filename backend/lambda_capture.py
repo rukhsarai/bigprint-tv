@@ -6,8 +6,10 @@ It is the only thing on the internet, so it is kept small and suspicious:
     POST /session          TV asks for a pairing code and a secret
     GET  /?c=..&k=..       the phone's camera page (static HTML)
     POST /upload?c=..&k=.. the phone sends one JPEG
-    GET  /result?c=..&k=.. the TV polls for the latest reading
-    GET  /audio?c=..&k=..&d=..&n=..   one line of Polly audio
+    GET  /result?c=..&k=..&since=..   the TV polls for the latest reading
+    POST /voice?c=..&k=..&d=..   the TV asks for a letter to be read aloud
+    GET  /voice?c=..&k=..&d=..   whether that voice is ready yet
+    GET  /audio?c=..&k=..&d=..&n=..   one part of the letter read aloud
     GET  /health
 
 Trust model: the 6-digit code identifies a session; the 22-character secret
@@ -284,20 +286,67 @@ def result(params):
     })
 
 
+# A voice still "making" after this long was lost (a failed run that could not
+# say so); report it as none rather than leave the TV waiting for ever.
+VOICE_STALE_SECONDS = 180
+
+
+def _voice_state(sid: str, doc_id: str) -> dict:
+    data, _ = _get_json(f"results/{sid}/{doc_id}/voice.json")
+    if not data:
+        return {"audio": "offer"}
+    if data.get("audio") == "making" and time.time() - data.get("at", 0) > VOICE_STALE_SECONDS:
+        return {"audio": "none"}
+    return {"audio": data.get("audio"), "parts": data.get("parts")}
+
+
+def voice(params, method: str):
+    """The voice is made only when someone asks to listen. Most letters are
+    read, not heard, and Polly is a large part of what a letter costs, so a
+    voice nobody plays is never paid for. Each letter is voiced at most once:
+    the request is claimed with a conditional write, so pressing Listen
+    twice, or on two TVs, still makes one recording."""
+    session, sid_or_err = _load_session(params)
+    if session is None:
+        return sid_or_err
+    sid = sid_or_err
+    doc_id = params.get("d", "")
+    if not DOC_RE.match(doc_id):
+        return _error(400, "Bad voice request.")
+    state = _voice_state(sid, doc_id)
+    if method == "POST" and state["audio"] == "offer":
+        document, _ = _get_json(f"results/{sid}/{doc_id}.json")
+        if not document:
+            return _error(404, "No such letter.")
+        try:
+            _put_json(f"results/{sid}/{doc_id}/voice.json",
+                      {"audio": "making", "at": int(time.time())}, IfNoneMatch="*")
+        except ClientError as e:
+            if e.response["Error"]["Code"] not in CONDITIONAL_CODES:
+                raise
+            # Someone else asked first; their request is the one being made.
+            return _resp(200, {"ok": True, **_voice_state(sid, doc_id)})
+        # The processing function picks this up, as it does a photo.
+        s3.put_object(Bucket=BUCKET, Key=f"voice/{sid}/{doc_id}.json", Body=b"{}",
+                      ContentType="application/json")
+        state = {"audio": "making"}
+    return _resp(200, {"ok": True, **state})
+
+
 def audio(params):
     session, sid_or_err = _load_session(params)
     if session is None:
         return sid_or_err
     sid = sid_or_err
     doc_id = params.get("d", "")
-    line = params.get("n", "")
-    if not DOC_RE.match(doc_id) or not line.isdigit() or int(line) > 200:
+    part = params.get("n", "")
+    if not DOC_RE.match(doc_id) or not part.isdigit() or int(part) >= 20:
         return _error(400, "Bad audio request.")
     try:
-        obj = s3.get_object(Bucket=BUCKET, Key=f"results/{sid}/{doc_id}/line-{int(line)}.mp3")
+        obj = s3.get_object(Bucket=BUCKET, Key=f"results/{sid}/{doc_id}/story-{int(part)}.mp3")
     except ClientError as e:
         if e.response["Error"]["Code"] in ("NoSuchKey", "404"):
-            return _error(404, "No audio for that line.")
+            return _error(404, "No audio for that letter.")
         raise
     return _resp(200, raw=obj["Body"].read(), content_type="audio/mpeg",
                  extra={"Cache-Control": "private, max-age=3600"})
@@ -322,6 +371,8 @@ def handler(event, _context):
             return upload(event, params)
         if method == "GET" and path == "/result":
             return result(params)
+        if method in ("GET", "POST") and path == "/voice":
+            return voice(params, method)
         if method == "GET" and path == "/audio":
             return audio(params)
         return _error(404, "Not found.")

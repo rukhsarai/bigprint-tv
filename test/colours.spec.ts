@@ -27,7 +27,6 @@ const contrast = (a: string, b: string) => {
 const TEXT_PAIRS: [keyof Colours, keyof Colours][] = [
   ['text', 'background'],
   ['textSecondary', 'background'],
-  ['spokenText', 'background'],
   ['buttonText', 'buttonFill'],
   ['focusText', 'focusFill'],
   ['disabledText', 'disabledFill'],
@@ -40,7 +39,6 @@ const TEXT_PAIRS: [keyof Colours, keyof Colours][] = [
 
 const MARK_PAIRS: [keyof Colours, keyof Colours][] = [
   ['focus', 'background'],
-  ['spokenBar', 'background'],
   ['attention', 'background'],
   ['attention', 'panelFill'],
   ['buttonEdge', 'background'],
@@ -70,7 +68,6 @@ describe.each(COLOURS_ORDER)('the %s look', (name) => {
     // If focus matched the text, a focus ring would read as more text.
     expect(c.focus).not.toBe(c.text === c.focus ? '' : c.text);
     expect(c.focus).not.toBe(c.attention);
-    expect(c.focus).not.toBe(c.spokenBar);
   });
 
   it('has a name the button and the first-run choice can show', () => {

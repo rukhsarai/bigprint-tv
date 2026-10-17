@@ -10,20 +10,18 @@
  * anyone's private post.
  */
 
-import type {SpeechMark} from './speechMarks';
-
-export type LineSpeech = {
-  /** Polly word timings for this line. */
-  marks: SpeechMark[];
-  /** Roughly how long the audio lasts; drives the silent fallback. */
-  durationMs: number;
-};
-
 export type DocumentFact = {
   label: string;
   value: string;
   /** Textract confidence. Anything below 90 was dropped by the pipeline. */
   confidence?: number;
+};
+
+/** One line of the page's own words, as printed. */
+export type ExactLine = {
+  text: string;
+  /** A title or section header, ordinary text, or a row of a table. */
+  kind: 'heading' | 'text' | 'row';
 };
 
 export type ScannedDocument = {
@@ -40,12 +38,14 @@ export type ScannedDocument = {
   keyFacts: DocumentFact[];
   /** Body text, rewritten into plain English, already split into lines. */
   lines: string[];
+  /** The main points only, a few short sentences. Absent on older results. */
+  summary?: string[];
+  /** The page's own words in reading order. Absent on older results. */
+  exact?: ExactLine[];
   /** True when OCR confidence was low, so the UI warns instead of pretending. */
   lowConfidence: boolean;
   /** Unix seconds when the backend produced it. Absent on fixtures. */
   createdAt?: number;
-  /** One entry per line when the backend made audio. Absent on fixtures. */
-  speech?: LineSpeech[];
 };
 
 /** financial, every figure cross-checked. */

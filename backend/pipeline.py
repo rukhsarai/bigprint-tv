@@ -31,6 +31,8 @@ Design decisions, learned from testing real photographs:
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
+
 import json
 import re
 from dataclasses import dataclass, field, asdict
@@ -52,6 +54,10 @@ GUARD_DROP_WARNING = 2
 # Hard ceiling on what is spoken; Polly bills per character.
 MAX_LINES = 40
 MAX_LINE_CHARS = 300
+# The main points: short enough to take in at a glance on the TV.
+MAX_SUMMARY = 6
+# The page's own words, in reading order. Long enough for a dense bill.
+MAX_EXACT = 150
 
 CLASSIFY_MODEL = "us.amazon.nova-lite-v1:0"
 REWRITE_MODEL = "us.amazon.nova-pro-v1:0"
@@ -114,6 +120,8 @@ class OcrResult:
     raw_lines: list[str]      # every LINE Textract saw, for the numeric guard
     confidence: float         # mean LINE confidence, 0-100
     feature: str              # "layout" or "detect"
+    # One per entry in texts: heading | text | row | marker. Empty = all text.
+    kinds: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -124,7 +132,13 @@ class ScannedDocument:
     kind: str
     sender: str | None
     keyFacts: list[DocumentFact] = field(default_factory=list)
+    # The whole letter in plain English, one spoken sentence per line.
     lines: list[str] = field(default_factory=list)
+    # The main points only, a handful of short sentences.
+    summary: list[str] = field(default_factory=list)
+    # The page's own words in reading order: {"text", "kind"} with kind
+    # heading | text | row, for readers who want exactly what is printed.
+    exact: list[dict] = field(default_factory=list)
     lowConfidence: bool = False
     # Kept for debugging and the accuracy report; not rendered by the app.
     diagnostics: dict[str, Any] = field(default_factory=dict)
@@ -149,8 +163,10 @@ class Pipeline:
             print(f"   AnalyzeDocument unavailable ({e.response['Error']['Code']}), using DetectDocumentText")
             blocks = self.textract.detect_document_text(Document=document)["Blocks"]
             feature = "detect"
-        texts, raw_lines, confidence = structure_blocks(blocks)
-        return OcrResult(texts=texts, raw_lines=raw_lines, confidence=confidence, feature=feature)
+        kinds: list[str] = []
+        texts, raw_lines, confidence = structure_blocks(blocks, kinds)
+        return OcrResult(texts=texts, raw_lines=raw_lines, confidence=confidence,
+                         feature=feature, kinds=kinds)
 
     # -- step 2: classify -------------------------------------------------
     def classify(self, texts: list[str]) -> dict:
@@ -236,26 +252,36 @@ class Pipeline:
         return kept, disputed
 
     # -- step 4: plain English --------------------------------------------
-    def simplify(self, ocr: OcrResult, kind: str, image_bytes: bytes | None = None) -> tuple[list[str], int]:
-        """Rewrite the document as sentences a person can listen to.
+    def simplify(self, ocr: OcrResult, kind: str,
+                 image_bytes: bytes | None = None) -> tuple[list[str], list[str], int]:
+        """Rewrite the document as sentences a person can listen to, plus
+        the main points in a few short sentences, from one model call.
 
-        Returns (lines, dropped) where dropped counts lines removed by the
-        numeric fidelity guard.
+        Returns (lines, summary, dropped) where dropped counts lines removed
+        by the numeric fidelity guard.
         """
         system, user = rewrite_prompt(ocr.texts, kind)
         image = image_bytes if (self.rewrite_with_image and image_bytes) else None
-        raw = self._nova(REWRITE_MODEL, user, max_tokens=2000, image_bytes=image, system=system)
+        raw = self._nova(REWRITE_MODEL, user, max_tokens=2200, image_bytes=image, system=system)
         data = _parse_json(raw) or {}
-        lines = [str(x).strip()[:MAX_LINE_CHARS] for x in data.get("lines", []) if str(x).strip()]
+
+        def clean(key: str, limit: int) -> list[str]:
+            out = [str(x).strip()[:MAX_LINE_CHARS] for x in data.get(key) or [] if str(x).strip()]
+            out = [l for l in out if _is_speakable(l)][:limit]
+            out = currency_guard(out, ocr.raw_lines)
+            return numeric_guard(out, ocr.raw_lines)
+
+        lines = [str(x).strip()[:MAX_LINE_CHARS] for x in data.get("lines") or [] if str(x).strip()]
         lines = [l for l in lines if _is_speakable(l)][:MAX_LINES]
         lines = currency_guard(lines, ocr.raw_lines)
         guarded = numeric_guard(lines, ocr.raw_lines)
         dropped = len(lines) - len(guarded)
+        summary = clean("summary", MAX_SUMMARY)
         if guarded:
-            return guarded, dropped
+            return guarded, summary, dropped
         # Fall back to the page's own words rather than showing nothing.
         fallback = [t[:MAX_LINE_CHARS] for t in ocr.texts if _is_speakable(t)][:MAX_LINES]
-        return fallback, dropped
+        return fallback, summary, dropped
 
     # -- orchestration ----------------------------------------------------
     def run(self, *, bucket: str | None = None, key: str | None = None,
@@ -280,13 +306,17 @@ class Pipeline:
         facts: list[tuple[str, DocumentFact]] = []
         disputed: list[dict] = []
         if meta["isFinancial"]:
-            try:
-                facts = self.extract_facts(document)
-                facts, disputed = self.cross_check_facts(image_bytes, facts)
-            except Exception as e:  # noqa: BLE001 - never fail the whole read
-                print(f"   key facts unavailable, continuing without: {type(e).__name__}")
-
-        lines, dropped = self.simplify(ocr, meta["kind"], image_bytes)
+            # The key facts and the rewrite both need only the OCR text and the
+            # photo, so they run side by side: on a bill that takes a few
+            # seconds off the time to the screen. boto3 clients are safe to
+            # share between threads.
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                facts_job = pool.submit(self._key_facts, document, image_bytes)
+                rewrite_job = pool.submit(self.simplify, ocr, meta["kind"], image_bytes)
+                lines, summary, dropped = rewrite_job.result()
+                facts, disputed = facts_job.result()
+        else:
+            lines, summary, dropped = self.simplify(ocr, meta["kind"], image_bytes)
 
         money_disputed = any(d["field"] in ("AMOUNT_DUE", "TOTAL") for d in disputed)
         low = (
@@ -301,6 +331,8 @@ class Pipeline:
             sender=meta["sender"],
             keyFacts=[f for _, f in facts],
             lines=lines,
+            summary=summary,
+            exact=exact_lines(ocr),
             lowConfidence=low,
             diagnostics={
                 "ocrConfidence": ocr.confidence,
@@ -314,6 +346,15 @@ class Pipeline:
         )
 
     # -- helpers -----------------------------------------------------------
+    def _key_facts(self, document: dict, image_bytes: bytes):
+        """Key facts with their cross-check, or nothing: never fail the whole read."""
+        try:
+            facts = self.extract_facts(document)
+            return self.cross_check_facts(image_bytes, facts)
+        except Exception as e:  # noqa: BLE001
+            print(f"   key facts unavailable, continuing without: {type(e).__name__}")
+            return [], []
+
     def _nova(self, model_id: str, prompt: str, max_tokens: int,
               image_bytes: bytes | None = None, system: str | None = None) -> str:
         content: list[dict] = []
@@ -361,8 +402,12 @@ def rewrite_prompt(texts: list[str], kind: str) -> tuple[str, str]:
         "The user message contains OCR text in reading order. Table rows appear between "
         "[Table] and [End of table] markers, each row as \"Heading: value; Heading: value\" "
         "or as cells separated by \" | \" when there are no headings.\n\n"
-        'Return ONLY JSON, no markdown fence: {"lines": ["one complete spoken sentence per line"]}\n\n'
-        "Rules:\n"
+        'Return ONLY JSON, no markdown fence: {"summary": ["the main points, one sentence each"], '
+        '"lines": ["one complete spoken sentence per line"]}\n\n'
+        "summary: at most 6 short sentences with only the main points: what the document is and "
+        "who it is from, then every amount to pay, date, deadline or appointment, then what the "
+        "reader must do. Nothing else.\n"
+        "lines: the whole document, following these rules:\n"
         "- EVERY line must be a complete sentence that makes sense when heard on its own. "
         "Never output a bare number, a column heading, a fragment, or the characters | [ ].\n"
         "- Start with what the document is and who it is from, in one sentence.\n"
@@ -443,13 +488,21 @@ def render_table(table: dict, by_id: dict) -> tuple[list[str], set[str]]:
     return rows, words_used
 
 
-def structure_blocks(blocks: list[dict]) -> tuple[list[str], list[str], float]:
+HEADING_LAYOUTS = {"LAYOUT_TITLE", "LAYOUT_SECTION_HEADER"}
+
+
+def structure_blocks(blocks: list[dict],
+                     kinds: list[str] | None = None) -> tuple[list[str], list[str], float]:
     """Turn Textract blocks into reading-order text with tables as rows.
 
     Works for AnalyzeDocument (LAYOUT + TABLES) output and degrades to plain
     line order for DetectDocumentText output. Returns
-    (texts, raw_lines, mean_confidence).
+    (texts, raw_lines, mean_confidence). When `kinds` is given it is filled
+    with one entry per text: heading | text | row | marker.
     """
+    if kinds is None:
+        kinds = []
+    heading = False  # set while emitting the lines of a title or section header
     by_id = {b["Id"]: b for b in blocks}
 
     lines = [b for b in blocks if b["BlockType"] == "LINE"]
@@ -491,8 +544,11 @@ def structure_blocks(blocks: list[dict]) -> tuple[list[str], list[str], float]:
         rows = rendered_tables[t]
         if rows:
             texts.append("[Table]")
+            kinds.append("marker")
             texts.extend(rows)
+            kinds.extend("row" for _ in rows)
             texts.append("[End of table]")
+            kinds.append("marker")
 
     def emit_line(line: dict):
         used_lines.add(line["Id"])
@@ -501,12 +557,14 @@ def structure_blocks(blocks: list[dict]) -> tuple[list[str], list[str], float]:
             text = line.get("Text", "").strip()
             if text:
                 texts.append(text)
+                kinds.append("heading" if heading else "text")
         else:
             emit_table(t)
 
     layout = [b for b in blocks if b["BlockType"].startswith("LAYOUT_")]
     if layout:
         for lb in layout:
+            heading = lb["BlockType"] in HEADING_LAYOUTS
             for cid in _children(lb):
                 child = by_id.get(cid)
                 if not child:
@@ -515,6 +573,7 @@ def structure_blocks(blocks: list[dict]) -> tuple[list[str], list[str], float]:
                     emit_line(child)
                 elif child["BlockType"] == "TABLE" and child["Id"] in table_index:
                     emit_table(table_index[child["Id"]])
+    heading = False
     for line in lines:  # anything the layout step did not claim
         if line["Id"] not in used_lines:
             emit_line(line)
@@ -522,6 +581,20 @@ def structure_blocks(blocks: list[dict]) -> tuple[list[str], list[str], float]:
         emit_table(t)
 
     return texts, raw_lines, mean_conf
+
+
+def exact_lines(ocr: OcrResult) -> list[dict]:
+    """The page's own words for the TV's exact-words view: reading order,
+    headings marked, table rows as rows, the table markers dropped."""
+    kinds = ocr.kinds if len(ocr.kinds) == len(ocr.texts) else ["text"] * len(ocr.texts)
+    out: list[dict] = []
+    for text, kind in zip(ocr.texts, kinds):
+        if kind == "marker" or not text.strip():
+            continue
+        out.append({"text": text.strip()[:MAX_LINE_CHARS], "kind": kind})
+        if len(out) >= MAX_EXACT:
+            break
+    return out
 
 
 # -- numeric fidelity --------------------------------------------------------

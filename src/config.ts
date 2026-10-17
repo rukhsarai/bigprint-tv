@@ -14,3 +14,10 @@ export const CAPTURE_BASE_URL =
 
 /** How often the TV asks whether a photo has been read, in milliseconds. */
 export const POLL_INTERVAL_MS = 3000;
+
+/**
+ * How often it asks while a photo is being read. The answer is a tiny status
+ * object, so asking every second costs almost nothing and takes up to two
+ * seconds off the wait for the letter to appear.
+ */
+export const PROCESSING_POLL_INTERVAL_MS = 1000;

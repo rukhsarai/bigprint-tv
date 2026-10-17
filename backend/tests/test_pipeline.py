@@ -10,7 +10,7 @@ from pipeline import (  # noqa: E402
     _clean_value, _is_speakable, _parse_date, _parse_json, numeric_guard,
     structure_blocks, values_agree,
 )
-from speech import byte_to_char_offsets  # noqa: E402
+from speech import split_parts, story_text  # noqa: E402
 
 
 def _word(id_, text):
@@ -124,19 +124,29 @@ class HelpersTest(unittest.TestCase):
         self.assertIsNone(_parse_json(""))
 
 
-class SpeechMarksTest(unittest.TestCase):
-    def test_byte_offsets_become_char_offsets(self):
-        text = "Pay £84.60 now"
-        encoded = text.encode("utf-8")
-        marks = [
-            {"time": 0, "type": "word", "start": 0, "end": 3, "value": "Pay"},
-            {"time": 200, "type": "word", "start": 4, "end": encoded.index(b" now"), "value": "£84.60"},
-            {"time": 900, "type": "word", "start": encoded.index(b"now"), "end": len(encoded), "value": "now"},
-        ]
-        out = byte_to_char_offsets(text, marks)
-        self.assertEqual([m["value"] for m in out], ["Pay", "£84.60", "now"])
-        for m in out:
-            self.assertEqual(text[m["start"]:m["end"]], m["value"])
+class StoryTest(unittest.TestCase):
+    def test_story_says_what_the_page_is_then_the_warning_then_the_letter(self):
+        said = story_text("Bill", "Severn Water", ["Pay £84.60.", "", "By 3 June."], True)
+        self.assertEqual(said[0], "Bill from Severn Water.")
+        self.assertIn("paper copy", said[1])
+        self.assertEqual(said[2:], ["Pay £84.60.", "By 3 June."])
+        self.assertEqual(story_text("Letter", None, ["Hello."]), ["Letter.", "Hello."])
+
+    def test_a_short_letter_is_one_part(self):
+        self.assertEqual(split_parts(["One.", "Two."]), ["One.\nTwo."])
+        self.assertEqual(split_parts([]), [])
+
+    def test_a_long_letter_splits_between_sentences(self):
+        sentences = [f"Sentence number {n} of the letter." for n in range(200)]
+        parts = split_parts(sentences, limit=500)
+        self.assertGreater(len(parts), 1)
+        self.assertTrue(all(len(p) <= 500 for p in parts))
+        self.assertEqual("\n".join(parts).split("\n"), sentences)
+
+    def test_an_overlong_sentence_is_cut_at_a_space(self):
+        parts = split_parts(["word " * 40], limit=50)
+        self.assertTrue(all(len(p) <= 50 for p in parts))
+        self.assertEqual(" ".join(parts).split(), ["word"] * 40)
 
 
 if __name__ == "__main__":

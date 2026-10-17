@@ -1,5 +1,5 @@
 import {type ScannedDocument, sampleReceipt} from '../data/documents';
-import {POLL_INTERVAL_MS} from '../config';
+import {POLL_INTERVAL_MS, PROCESSING_POLL_INTERVAL_MS} from '../config';
 
 /**
  * How the TV learns that a photo has arrived and been read.
@@ -29,10 +29,40 @@ export type DocumentListener = {
   onError: (message: string) => void;
 };
 
+/**
+ * Where a letter's voice is. It is made only when someone asks to listen:
+ * 'making' until it is ready, then the recordings to play in order, or
+ * 'none' when it could not be made.
+ */
+export type VoiceUpdate =
+  | {state: 'making'}
+  | {state: 'ready'; urls: string[]}
+  | {state: 'none'};
+
 export type DocumentService = {
   subscribe: (listener: DocumentListener) => Unsubscribe;
-  /** Where to fetch the audio for one line, or null when there is no audio. */
-  audioUrl: (document: ScannedDocument, lineIndex: number) => string | null;
+  /** Whether this letter can be read aloud at all. */
+  canListen: (document: ScannedDocument) => boolean;
+  /**
+   * Ask for the letter to be read aloud. The first ask makes the voice; any
+   * later one finds it already made. Updates come until 'ready' or 'none'.
+   */
+  requestVoice: (
+    document: ScannedDocument,
+    onUpdate: (update: VoiceUpdate) => void,
+  ) => Unsubscribe;
+};
+
+/** For services with no voice at all: the mock, and the failing service. */
+const noVoice = {
+  canListen: () => false,
+  requestVoice: (
+    _document: ScannedDocument,
+    onUpdate: (update: VoiceUpdate) => void,
+  ) => {
+    onUpdate({state: 'none'});
+    return () => {};
+  },
 };
 
 // ---------------------------------------------------------------------------
@@ -65,7 +95,7 @@ export const createMockDocumentService = (
       clearTimeout(arrival);
     };
   },
-  audioUrl: () => null,
+  ...noVoice,
 });
 
 /** A service that only ever fails, for exercising the error path. */
@@ -82,7 +112,7 @@ export const createFailingDocumentService = (
     const timer = setTimeout(() => listener.onError(message), delayMs);
     return () => clearTimeout(timer);
   },
-  audioUrl: () => null,
+  ...noVoice,
 });
 
 // ---------------------------------------------------------------------------
@@ -103,6 +133,18 @@ type ResultResponse = {
   document?: ScannedDocument | null;
   expiresAt?: number;
 };
+
+type VoiceResponse = {
+  ok: boolean;
+  /** offer: not asked for yet. */
+  audio?: 'offer' | 'making' | 'ready' | 'none';
+  parts?: number | null;
+};
+
+/** The voice is checked this often while it is being made. */
+export const VOICE_POLL_MS = 1000;
+/** A voice takes seconds; after this the TV stops waiting and says so. */
+export const VOICE_TIMEOUT_MS = 60 * 1000;
 
 const NO_NETWORK =
   'The TV cannot reach the internet. Please check the connection.';
@@ -141,25 +183,32 @@ const fetchWithTimeout = (
   url: string,
   init?: {method?: string},
 ): ReturnType<typeof fetch> => {
-  const ctrl = typeof AbortController === 'function' ? new AbortController() : null;
+  const ctrl =
+    typeof AbortController === 'function' ? new AbortController() : null;
   const timer = setTimeout(() => ctrl?.abort(), REQUEST_TIMEOUT_MS);
   const request = ctrl ? {...init, signal: ctrl.signal} : init;
-  return Promise.resolve(fetchImpl(url, request)).finally(() => clearTimeout(timer));
+  return Promise.resolve(fetchImpl(url, request)).finally(() =>
+    clearTimeout(timer),
+  );
 };
 
 /** The backend gives up after two minutes; the TV should not wait much longer. */
 export const PROCESSING_TIMEOUT_MS = 150 * 1000;
-const TOOK_TOO_LONG =
-  'That took too long. Please take the photo again.';
+const TOOK_TOO_LONG = 'That took too long. Please take the photo again.';
 
 /**
  * Talks to the capture Lambda. One session per subscription; polls for a
- * result every POLL_INTERVAL_MS; renews the session before it expires.
+ * result every POLL_INTERVAL_MS, or every PROCESSING_POLL_INTERVAL_MS while a
+ * photo is being read; renews the session when the backend says it is over.
  */
 export const createRemoteDocumentService = (
   baseUrl: string,
   fetchImpl: typeof fetch = fetch,
   pollIntervalMs: number = POLL_INTERVAL_MS,
+  processingPollMs: number = Math.min(
+    pollIntervalMs,
+    PROCESSING_POLL_INTERVAL_MS,
+  ),
 ): DocumentService => {
   const base = baseUrl.replace(/\/+$/, '');
   // The live session, and the session each document arrived under: audio for
@@ -167,17 +216,82 @@ export const createRemoteDocumentService = (
   let current: {code: string; secret: string; expiresAt: number} | null = null;
   const credentialsFor = new Map<string, {code: string; secret: string}>();
 
-  const audioUrl = (document: ScannedDocument, lineIndex: number) => {
-    const creds = credentialsFor.get(document.id) ?? current;
-    if (!creds || !document.speech || !document.speech[lineIndex]) {
-      return null;
+  const query = (document: ScannedDocument) => {
+    const creds = credentialsFor.get(document.id);
+    return creds
+      ? `c=${creds.code}&k=${encodeURIComponent(
+          creds.secret,
+        )}&d=${encodeURIComponent(document.id)}`
+      : null;
+  };
+
+  const requestVoice = (
+    document: ScannedDocument,
+    onUpdate: (update: VoiceUpdate) => void,
+  ): Unsubscribe => {
+    let active = true;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const q = query(document);
+    const startedAt = Date.now();
+    const finish = (update: VoiceUpdate) => {
+      if (active) {
+        active = false;
+        onUpdate(update);
+      }
+    };
+    // The first call asks for the voice; the rest only look.
+    const check = async (method: 'POST' | 'GET') => {
+      if (!active) {
+        return;
+      }
+      try {
+        const res = await fetchWithTimeout(fetchImpl, `${base}/voice?${q}`, {
+          method,
+        });
+        const body = (await res.json()) as VoiceResponse;
+        if (!active) {
+          return;
+        }
+        if (res.ok && body.ok && body.audio === 'ready' && body.parts) {
+          const urls = Array.from(
+            {length: body.parts},
+            (_, n) => `${base}/audio?${q}&n=${n}`,
+          );
+          finish({state: 'ready', urls});
+          return;
+        }
+        if (!res.ok || !body.ok || body.audio === 'none') {
+          finish({state: 'none'});
+          return;
+        }
+      } catch {
+        // A dropped poll is retried until the deadline.
+      }
+      if (Date.now() - startedAt > VOICE_TIMEOUT_MS) {
+        finish({state: 'none'});
+        return;
+      }
+      if (active) {
+        timer = setTimeout(() => check('GET'), VOICE_POLL_MS);
+      }
+    };
+    if (!q) {
+      finish({state: 'none'});
+    } else {
+      onUpdate({state: 'making'});
+      check('POST');
     }
-    const q = `c=${creds.code}&k=${encodeURIComponent(creds.secret)}`;
-    return `${base}/audio?${q}&d=${encodeURIComponent(document.id)}&n=${lineIndex}`;
+    return () => {
+      active = false;
+      if (timer !== null) {
+        clearTimeout(timer);
+      }
+    };
   };
 
   return {
-    audioUrl,
+    canListen: (document) => credentialsFor.has(document.id),
+    requestVoice,
     subscribe: (listener) => {
       let active = true;
       let timer: ReturnType<typeof setTimeout> | null = null;
@@ -187,6 +301,10 @@ export const createRemoteDocumentService = (
       let lastSession: PairingSession | null = null;
       let failures = 0;
       let noticeAfterSession: string | null = null;
+      // A tiny status answer every second while a photo is being read, so the
+      // letter appears within a second of being ready.
+      const nextPollMs = () =>
+        lastState === 'processing' ? processingPollMs : pollIntervalMs;
       const request = (url: string, init?: {method?: string}) =>
         fetchWithTimeout(fetchImpl, url, init);
 
@@ -206,7 +324,9 @@ export const createRemoteDocumentService = (
           const body = (await res.json()) as SessionResponse;
           if (!res.ok || !body.ok) {
             // The backend answered (busy, capped, broken): say what it said.
-            throw new BackendError(body.message || 'Could not start a session. Please try again.');
+            throw new BackendError(
+              body.message || 'Could not start a session. Please try again.',
+            );
           }
           if (!active) {
             return;
@@ -218,7 +338,9 @@ export const createRemoteDocumentService = (
           };
           lastSession = {
             code: body.code,
-            captureUrl: `${base}/?c=${body.code}&k=${encodeURIComponent(body.secret)}`,
+            captureUrl: `${base}/?c=${body.code}&k=${encodeURIComponent(
+              body.secret,
+            )}`,
             expiresAt: body.expiresAt,
           };
           failures = 0;
@@ -248,7 +370,9 @@ export const createRemoteDocumentService = (
         // the backend still accepts, so a phone page sent under it would be
         // read into a session nobody is watching.
         try {
-          const q = `c=${current.code}&k=${encodeURIComponent(current.secret)}&since=${encodeURIComponent(lastDocumentId)}`;
+          const q =
+            `c=${current.code}&k=${encodeURIComponent(current.secret)}` +
+            `&since=${encodeURIComponent(lastDocumentId)}`;
           const res = await request(`${base}/result?${q}`);
           if (res.status === 404 || res.status === 410) {
             // The backend forgot us (expiry, redeploy). Start again, and say
@@ -308,7 +432,7 @@ export const createRemoteDocumentService = (
             lastState = 'idle';
             processingSince = null;
           }
-          schedule(poll, pollIntervalMs);
+          schedule(poll, nextPollMs());
           return;
         }
         if (failures >= POLL_FAILURES_BEFORE_NOTICE && lastSession) {
@@ -316,7 +440,7 @@ export const createRemoteDocumentService = (
           listener.onSession(lastSession);
         }
         failures = 0;
-        schedule(poll, pollIntervalMs);
+        schedule(poll, nextPollMs());
       };
 
       startSession();

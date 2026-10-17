@@ -14,7 +14,7 @@ import {
  * native turbo module at import time: a static import would crash the whole
  * app at startup on a build without the module, before any guard could run.
  * Metro bundles a require inside try/catch as optional, so the build is fine
- * either way, and the app simply falls back to the silent highlight.
+ * either way, and the app simply offers no voice.
  */
 export const createVegaAudioPlayer = (): AudioPlayer | null => {
   let media: {

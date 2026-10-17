@@ -12,8 +12,10 @@ A Fire TV app for people who cannot comfortably read paper post — primarily
 older people with age-related sight loss.
 
 Someone photographs a letter with a phone. It appears on the television in very
-large print, and is read aloud in a natural voice with the current word
-highlighted.
+large print, to read: the whole letter in plain English, its main points, or
+the exact words. Someone who would rather listen presses Listen and hears the
+whole letter in a natural voice, made on request so unheard letters cost
+nothing.
 
 **Scope is short documents that arrive on paper and must be understood** —
 bills, hospital letters, council letters, medicine labels, cards. Not books: a
@@ -55,13 +57,13 @@ Judging criteria: Tech Implementation, Design, Potential Impact, Quality of Idea
 |---|---|
 | Vega app | Builds, installs, runs on the Vega virtual device |
 | Pairing screen | QR code carrying a session secret, 6-digit confirmation code, connecting / waiting / reading / error states |
-| Document view | Large print, D-pad line navigation, read-aloud with word highlight driven by real audio |
+| Document view | Large print, D-pad line navigation, three views (full letter, main points, exact words), Listen (the whole letter read aloud, voice made on request), Next photo |
 | Text size | 1x / 1.25x / 1.5x / 2x, persisted, shared across screens |
 | Colours | Dark (default), Light, Yellow on black; chosen at first run, one Colours button on every screen, persisted (`src/theme/`) |
 | Accessibility | Audited against Amazon's A11Y Compass and fixed; new states have spoken equivalents |
 | Backend | Two Lambdas + S3 behind an API Gateway HTTP API, deployed; see `backend/README.md` |
-| Pipeline | Textract LAYOUT+TABLES (headings kept) → Nova Lite classify → AnalyzeExpense + Nova Pro image cross-check → Nova Pro rewrite with the letter fenced as data → currency guard → whole-figure numeric guard → Polly neural with word marks |
-| Tests | App: 142 Jest tests (including WCAG contrast for every colour pair), typecheck clean, 0 lint errors. Backend: 26 unit tests |
+| Pipeline | Textract LAYOUT+TABLES (headings kept) → Nova Lite classify → AnalyzeExpense + Nova Pro image cross-check → Nova Pro rewrite with the letter fenced as data → currency guard → whole-figure numeric guard. Polly neural, the whole letter as one story, only when someone presses Listen |
+| Tests | App: 139 Jest tests (including WCAG contrast for every colour pair), typecheck clean, 0 lint errors. Backend: 37 unit tests |
 | Abuse limits | 128-bit session secret, JPEG-only 4 MB uploads, 20 per session, 40 sessions and 80 uploads per address per day, a 200 docs/day cap spent only after a real read, 1-day data expiry |
 
 ### Unverified
@@ -78,11 +80,11 @@ Judging criteria: Tech Implementation, Design, Potential Impact, Quality of Idea
 - **Nothing has been run on a physical Fire TV**, and VoiceView has never been
   run against it. For an accessibility product that is a real gap — the markup
   is correct by construction, not confirmed by ear.
-- **Audible confirmation and word-highlight sync.** Playback was verified from
-  the media pipeline's events (`playing → ended`) for one line, not by ear;
-  whether the highlight follows the voice, and whether several lines play in
-  a row, is unconfirmed. If audio fails, the app falls back to the silent
-  highlight automatically.
+- **Audible confirmation, pause and resume.** Playback was verified from the
+  media pipeline's events (`playing → ended`) for one line of the old
+  per-line voice, not by ear. Listen, Pause, Carry on listening, and a letter
+  long enough to need two parts are unconfirmed on a device. If the voice
+  cannot be made or played, the button says No voice; the text is unaffected.
 - **The phone page on a real iPhone.** HEIC → JPEG conversion relies on Safari
   decoding HEIC into a canvas, which it does on iOS 11+, but it has only been
   reasoned about, not tapped.
@@ -134,22 +136,22 @@ src/
   config.ts                    backend URL and poll interval
   App.tsx                      picks mock or remote service, routes on status
   screens/PairingScreen.tsx    QR, 6-digit code, connecting/waiting/reading/error, text size
-  screens/DocumentView.tsx     large print, line navigation, word highlight
+  screens/DocumentView.tsx     large print, line navigation, views, Listen, Next photo
   hooks/useTextScale.ts        text size + persistence, shared by both screens
-  hooks/useReadAloud.ts        word highlight from audio position, silent fallback
+  hooks/useListen.ts           the whole letter read aloud: ask, play the parts, pause
+  hooks/useDocumentViewChoice.ts full letter / main points / exact words, remembered
   hooks/useIncomingDocument.ts connecting/waiting/processing/arrived/error; holds a
-                               second page until the reader presses Back
+                               second page until the reader presses Next photo
   services/documentService.ts  THE SEAM — mock and remote (session, polling, renewal)
   services/audioPlayer.ts      tiny player interface + media-element wrapper
   services/vegaAudio.ts        Vega W3C media AudioPlayer behind that interface
   data/documents.ts            GENERATED from real photos, do not hand-edit
-  data/speechMarks.ts          Polly-shaped speech marks + local generator (fallback)
 backend/
-  lambda_capture.py            public endpoint: session, page, upload, result, audio
+  lambda_capture.py            public endpoint: session, page, upload, result, voice, audio
   capture_page.html            the phone page
-  lambda_process.py            S3-triggered: pipeline + speech + results
+  lambda_process.py            S3-triggered: a photo → text; a voice request → audio
   pipeline.py                  photo → OCR → classify → facts → plain English → guard
-  speech.py                    Polly per line with word timings
+  speech.py                    Polly: the whole letter as one story, in parts if long
   tests/                       unit tests (python -m unittest discover backend/tests)
   run_batch.py                 accuracy report over the bucket
   gen_fixtures.py              regenerates src/data/documents.ts
@@ -255,18 +257,32 @@ minute, taking the service down for every real user until midnight: it is now
 spent only after a photo has actually been read, every address gets 40 sessions
 and 80 uploads a day, and the counters use S3 conditional writes.
 
-### Audio is one MP3 per line, from Polly, with word marks
+### Reading and listening are separate, and the voice is made on request
 
-Polly is required because only it returns **speech marks** — word-level timings
-— which is what makes synchronised highlighting possible. Per-line files mean
-any line starts instantly and stops cleanly; Polly bills by character, so the
-split costs nothing extra. Marks arrive as UTF-8 byte offsets and are converted
-to character offsets in `speech.py`, or "£" would shift every highlight.
+Reading on the TV is the main use. Testing showed a word-by-word highlight
+read as blinking, and a voice that drives the screen helps neither the reader
+(things move) nor the listener (who is not looking). So the text is only for
+reading, and the voice is the whole letter as one story, start to finish,
+with one button: Listen, Pause, Carry on listening. Nothing on screen
+follows it, and changing the view does not stop it.
 
-### Second page? Hold it until Back
+The voice was more than half of what a letter cost ($0.05 of $0.08, with a
+second Polly call per line for word timings). It is now made only when
+someone presses Listen: the capture function claims it once per letter with a
+conditional write and drops a `voice/<sid>/<doc>.json` object, whose S3 event
+runs the processing function, which still holds the only Polly permission. It
+says what the page is and any low-confidence warning first, since a listener
+cannot see either. Past Polly's 3,000-character limit it is split between
+sentences into parts the TV plays back to back; Polly bills by character, so
+parts cost nothing extra.
+
+### Second page? Hold it until Next photo
 
 A carer may photograph three pages in a row. A new document never replaces the
-one being read; it is held and shown when the reader presses Back.
+one being read; it is held, the button changes to "Next photo is ready", and
+it is shown when the reader presses it (or Back on the remote). With nothing
+held, Next photo shows the code again; the phone page already offers "Send
+another page", so the session carries on without pairing again.
 
 ### HEIC fails outright
 
@@ -337,7 +353,6 @@ lets a carer photograph several pages and have them queued on the TV.
 | Bedrock was blocked for hours on a new account | `ThrottlingException: Too many tokens per day` with all quotas at 0 was **account verification**, not quota. It cleared itself. |
 | Inline policies on a user share a 2048-byte limit | Role policies go on the roles. Pasting one onto the user fails with "Maximum policy size exceeded". |
 | The snapshot test was flaky | `Math.random` is pinned in `test/App.spec.tsx`. |
-| Polly speech-mark offsets are bytes, not characters | Converted in `speech.py`; the app slices JS strings. |
 
 ---
 

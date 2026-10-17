@@ -20,12 +20,14 @@
       "Resource": "arn:aws:s3:::bigprint-tv-dev-ru22/ratelimit/*"
     },
     {
-      "Sid": "StorePhotosAndProcessingStatus",
+      "Sid": "StorePhotosVoiceRequestsAndStatus",
       "Effect": "Allow",
       "Action": "s3:PutObject",
       "Resource": [
         "arn:aws:s3:::bigprint-tv-dev-ru22/uploads/*",
-        "arn:aws:s3:::bigprint-tv-dev-ru22/results/*/status.json"
+        "arn:aws:s3:::bigprint-tv-dev-ru22/voice/*",
+        "arn:aws:s3:::bigprint-tv-dev-ru22/results/*/status.json",
+        "arn:aws:s3:::bigprint-tv-dev-ru22/results/*/voice.json"
       ]
     },
     {
