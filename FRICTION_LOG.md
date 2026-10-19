@@ -194,3 +194,122 @@ jest.mock('@react-native-async-storage/async-storage', () =>
 **Suggestion:** Add a one-line "Testing" note to the Vega library page pointing
 at the bundled mock. The `helloWorld` template ships a Jest config, so most
 developers will hit this the first time they add the library.
+
+---
+
+## 7. `AudioPlayer` in `react-native-w3cmedia` is documented only for MSE pre-buffering
+
+**Severity: Low — found while reading the package, not yet confirmed on a device.**
+
+**Task:** Play an MP3 from an HTTPS URL and read `currentTime` to highlight the
+spoken word, using `@amazon-devices/react-native-w3cmedia@2.3.2-rn-83`.
+
+**Steps:** Read the package README and `dist/interface/AudioPlayer.d.ts` and
+`dist/MediaPlayer.d.ts`.
+
+**Expected:** A short example for the common case — set `src` to a URL, call
+`play()`, listen for `ended`.
+
+**Actual:** The README's only `AudioPlayer` example builds a `MediaSource`,
+appends chunks by hand and then calls `play()`. Nothing states whether a plain
+`src = "https://…/line.mp3"` is supported without MSE, whether `initialize()`
+must be awaited before setting `src` (the type comment says "wait for the
+promise to be fulfilled before calling any other function", the README example
+does not wait), or which `AudioContentType` / `AudioUsageType` a speech prompt
+should use. The HTMLMediaElement typing lists custom events
+(`playbackstarted`, `audiofocuslost`) that the README never mentions.
+
+**Workaround:** Wrote a small adapter (`src/services/audioPlayer.ts`) against
+the type definitions, awaiting `initialize()` once and reusing the instance,
+with a silent-highlight fallback if playback errors.
+
+**Suggestion:** Add a ten-line "play a URL" example to the README for both
+`Audio` and `AudioPlayer`, state the `initialize()` requirement next to the
+constructor, and document the custom events and the audio type enums with a
+sentence each on when to use them.
+
+## 8. S3 answers "AccessDenied" for a key that simply does not exist
+
+**Severity: Medium — cost an evening of wrong diagnosis.**
+
+**Task:** Give each Lambda role the smallest S3 policy: `GetObject` and
+`PutObject` on a few prefixes, no `ListBucket`.
+
+**Steps:** `s3.get_object` on a key that has not been written yet (a session
+code nobody has used, today's counter before the first document).
+
+**Expected:** `NoSuchKey`, as the SDK documentation for `GetObject` describes.
+
+**Actual:** `AccessDenied`, with a message blaming a missing
+`s3:ListBucket` permission. The first-run path of both functions crashed
+with a permissions error on a correct policy, which read exactly like the
+genuine policy mistake that had been made minutes earlier (an older copy of
+the file pasted onto the role), so the two were chased as one problem.
+
+**Workaround:** Both functions treat a 403 from `GetObject` as "not there",
+with a log line so a real policy error still shows. `AWS_SETUP.md` now has a
+"check the paste" step that compares `Sid` names, because the console cannot
+show which version of a file was pasted.
+
+**Suggestion:** The behaviour is documented in an S3 troubleshooting page,
+but not where a developer looks: the `GetObject` API reference and the error
+message itself. The message could say "the object may not exist; without
+s3:ListBucket, S3 cannot distinguish a missing key from a forbidden one".
+
+
+## 9. The build silently rewrites `manifest.toml`
+
+**Severity: Low — confusing, not blocking.**
+
+**Task:** Build the app with `react-native build-vega` after adding
+`@amazon-devices/react-native-w3cmedia`.
+
+**Steps:** Commit `manifest.toml` with the `w3cmedia_2` module declared, build,
+run `git status`.
+
+**Expected:** Either the build fails validation because two transitive modules
+are missing from the manifest, or it links them without touching my file.
+
+**Actual:** The build appends `[[needs.module]]` entries for
+`kepler_media_controls_1` and `keplermediadescriptor_1` to the committed
+`manifest.toml`, so the working tree is dirty after every build and the diff
+looks like an accidental edit. Nothing in the build output says it did this.
+
+**Workaround:** Declare the two modules in the committed manifest (this
+repository now does), so the rewrite is a no-op.
+
+**Suggestion:** Print one line when autolinking adds a module to the manifest,
+and point at the `kepler-compatibility.json` it took the id from. Better still,
+offer a `--check` mode that fails instead of writing, for CI.
+
+## 10. A public Lambda Function URL, configured exactly as documented, answers 403 to everyone
+
+**Severity: High — the TV could not reach its backend at all.**
+
+**Task:** Expose the capture function on a public URL (`AuthType NONE`) so a
+phone and a TV can call it with no AWS credentials.
+
+**Steps:** `CreateFunctionUrlConfig` with `AuthType NONE`; `AddPermission`
+with action `lambda:InvokeFunctionUrl`, principal `*`, condition
+`lambda:FunctionUrlAuthType = NONE` (the statement the documentation gives);
+`curl` the URL from a laptop.
+
+**Expected:** 200 from `/health`.
+
+**Actual:** `403 AccessDeniedException` with the body "Forbidden. For
+troubleshooting Function URL authorization issues, see urls-auth". The function
+invokes fine through the API, `GetFunctionUrlConfig` says `NONE`, `GetPolicy`
+shows the statement verbatim. The deploy user cannot call
+`organizations:DescribeOrganization`, so whatever refuses the request (an
+organisation-level control is the only thing left) cannot be seen from the
+account that owns the function, and the error names no control.
+
+**Workaround:** An API Gateway HTTP API in front of the function. The API
+invokes the function as a service principal, so no public statement is needed
+on the function, and the event format is the same (payload 2.0), so the code
+did not change. `aws/deploy.py` now does this by default.
+
+**Suggestion:** When a Function URL request is refused by something other
+than the function's own policy, say so in the 403 body ("refused by an
+organisation policy"), and let `GetFunctionUrlConfig` report an effective
+public-access state. Hours went into re-checking a policy that was right.

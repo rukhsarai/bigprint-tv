@@ -1,0 +1,50 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "Sessions",
+      "Effect": "Allow",
+      "Action": [
+        "s3:PutObject",
+        "s3:GetObject"
+      ],
+      "Resource": "arn:aws:s3:::bigprint-tv-dev-ru22/sessions/*"
+    },
+    {
+      "Sid": "PerAddressLimits",
+      "Effect": "Allow",
+      "Action": [
+        "s3:PutObject",
+        "s3:GetObject"
+      ],
+      "Resource": "arn:aws:s3:::bigprint-tv-dev-ru22/ratelimit/*"
+    },
+    {
+      "Sid": "StorePhotosVoiceRequestsAndStatus",
+      "Effect": "Allow",
+      "Action": "s3:PutObject",
+      "Resource": [
+        "arn:aws:s3:::bigprint-tv-dev-ru22/uploads/*",
+        "arn:aws:s3:::bigprint-tv-dev-ru22/voice/*",
+        "arn:aws:s3:::bigprint-tv-dev-ru22/results/*/status.json",
+        "arn:aws:s3:::bigprint-tv-dev-ru22/results/*/voice.json"
+      ]
+    },
+    {
+      "Sid": "ReadResults",
+      "Effect": "Allow",
+      "Action": "s3:GetObject",
+      "Resource": "arn:aws:s3:::bigprint-tv-dev-ru22/results/*"
+    },
+    {
+      "Sid": "OwnLogs",
+      "Effect": "Allow",
+      "Action": [
+        "logs:CreateLogGroup",
+        "logs:CreateLogStream",
+        "logs:PutLogEvents"
+      ],
+      "Resource": "arn:aws:logs:us-east-1:236605144361:log-group:/aws/lambda/bigprint-tv-capture*"
+    }
+  ]
+}

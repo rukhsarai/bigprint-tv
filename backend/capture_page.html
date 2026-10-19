@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>BigPrint TV — send a photo</title>
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 24px 20px 40px; font: 20px/1.4 -apple-system, system-ui, "Segoe UI", Roboto, sans-serif;
+    background: #111; color: #fff; min-height: 100vh;
+  }
+  h1 { font-size: 26px; margin: 0 0 8px; }
+  p { margin: 0 0 16px; }
+  .tv { display: inline-block; background: #FFD400; color: #000; font-weight: 700; padding: 6px 14px;
+        border-radius: 8px; letter-spacing: 3px; font-size: 24px; }
+  .btn {
+    display: block; width: 100%; padding: 22px 16px; margin: 18px 0; font-size: 24px; font-weight: 700;
+    border: 3px solid #fff; border-radius: 14px; background: #FFD400; color: #000; text-align: center;
+    cursor: pointer;
+  }
+  .btn.secondary { background: #222; color: #fff; }
+  .btn:disabled { opacity: .5; }
+  input[type=file] { position: absolute; width: 1px; height: 1px; opacity: 0; }
+  #status { font-size: 22px; padding: 16px; border-radius: 12px; background: #222; display: none; }
+  #status.err { background: #5A1E00; border: 2px solid #FF9A3C; }
+  #status.ok { background: #0B3D1A; border: 2px solid #4CD964; }
+  .tips { color: #ccc; font-size: 17px; }
+  .tips li { margin-bottom: 6px; }
+  #preview { width: 100%; max-height: 40vh; object-fit: contain; border-radius: 10px; display: none; margin-top: 10px; background:#000; }
+</style>
+</head>
+<body>
+  <h1>Send a letter to the TV</h1>
+  <p id="tvline">Sending to TV <span class="tv" id="code">----</span></p>
+
+  <div id="invalid" style="display:none">
+    <p class="err">This link is not complete. Please scan the QR code on the TV screen again.</p>
+  </div>
+
+  <div id="main">
+    <label class="btn" for="file" id="takeBtn">&#128247; Take a photo of the letter</label>
+    <input id="file" type="file" accept="image/*" capture="environment">
+    <img id="preview" alt="">
+    <div id="status" role="status" aria-live="polite"></div>
+    <button class="btn secondary" id="againBtn" style="display:none">Send another page</button>
+    <ul class="tips">
+      <li>Lay the letter flat in good light.</li>
+      <li>Fill the screen with the page and hold still.</li>
+      <li>One page at a time. Bills, letters, labels and cards all work.</li>
+    </ul>
+  </div>
+
+<script>
+(function () {
+  var params = new URLSearchParams(location.search);
+  var code = params.get('c') || '';
+  var key = params.get('k') || '';
+  var valid = /^\d{6}$/.test(code) && /^[A-Za-z0-9_-]{16,64}$/.test(key);
+  var $ = function (id) { return document.getElementById(id); };
+
+  $('code').textContent = valid ? code : '----';
+  if (!valid) { $('invalid').style.display = 'block'; $('main').style.display = 'none'; return; }
+
+  // The secret stays in the address bar on purpose: a reload or a "back" must
+  // still work for a carer mid-way through a letter. The session expires in
+  // two hours and the page sends no referrer.
+
+  var MAX_EDGE = 2000;   // pixels; plenty for OCR, keeps uploads under ~1 MB
+  var QUALITY = 0.85;   // a fifth smaller than 0.9, no visible loss for OCR
+
+  function show(kind, text) {
+    var s = $('status');
+    s.className = kind; s.textContent = text; s.style.display = 'block';
+  }
+
+  function loadImage(file) {
+    return new Promise(function (resolve, reject) {
+      var url = URL.createObjectURL(file);
+      var img = new Image();
+      img.onload = function () { resolve({img: img, url: url}); };
+      img.onerror = function () { URL.revokeObjectURL(url); reject(new Error('decode')); };
+      img.src = url;
+    });
+  }
+
+  // Re-encode as JPEG, downscaled. This also converts HEIC from iPhones, which the
+  // backend cannot read, and applies the camera's rotation.
+  function toJpeg(file) {
+    return loadImage(file).then(function (r) {
+      var w = r.img.naturalWidth, h = r.img.naturalHeight;
+      if (!w || !h) throw new Error('decode');
+      var scale = Math.min(1, MAX_EDGE / Math.max(w, h));
+      var canvas = document.createElement('canvas');
+      canvas.width = Math.round(w * scale); canvas.height = Math.round(h * scale);
+      var ctx = canvas.getContext('2d');
+      ctx.drawImage(r.img, 0, 0, canvas.width, canvas.height);
+      URL.revokeObjectURL(r.url);
+      return new Promise(function (resolve, reject) {
+        canvas.toBlob(function (blob) {
+          if (blob) resolve(blob); else reject(new Error('encode'));
+        }, 'image/jpeg', QUALITY);
+      });
+    });
+  }
+
+  function upload(blob) {
+    return fetch('upload?c=' + encodeURIComponent(code) + '&k=' + encodeURIComponent(key), {
+      method: 'POST',
+      headers: {'Content-Type': 'image/jpeg'},
+      body: blob
+    }).then(function (res) {
+      return res.json().catch(function () { return {}; }).then(function (body) {
+        if (!res.ok || !body.ok) throw new Error(body.message || 'upload');
+        return body;
+      });
+    });
+  }
+
+  $('file').addEventListener('change', function () {
+    var file = this.files && this.files[0];
+    if (!file) return;
+    $('takeBtn').style.display = 'none';
+    $('againBtn').style.display = 'none';
+    show('', 'Preparing your photo…');
+    toJpeg(file).catch(function () {
+      // If the browser cannot decode it, send the original and let the backend decide.
+      return file;
+    }).then(function (blob) {
+      var p = $('preview');
+      p.src = URL.createObjectURL(blob); p.style.display = 'block';
+      show('', 'Sending to the TV…');
+      return upload(blob);
+    }).then(function () {
+      show('ok', 'Sent. The TV is reading it now — look at the screen.');
+    }).catch(function (e) {
+      var msg = String(e && e.message || '');
+      if (msg === 'upload' || msg === '') msg = 'Could not send the photo. Check your connection and try again.';
+      show('err', msg);
+    }).then(function () {
+      $('againBtn').style.display = 'block';
+      $('file').value = '';
+    });
+  });
+
+  $('againBtn').addEventListener('click', function () {
+    $('againBtn').style.display = 'none';
+    $('preview').style.display = 'none';
+    $('status').style.display = 'none';
+    $('takeBtn').style.display = 'block';
+  });
+})();
+</script>
+</body>
+</html>

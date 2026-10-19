@@ -1,215 +1,126 @@
 # AWS Setup — BigPrint TV
 
-## Current values (verified 11 Oct 2026)
+## Current values
 
 | | |
 |---|---|
-| Region | `us-east-1` |
-| S3 bucket | `bigprint-tv-dev-ru22` |
-| IAM user | `bigprint-tv-dev` |
-| Policy | `BigPrintTvPhase1` |
+| Region | `us-east-1` — everything stays here |
+| S3 bucket | `bigprint-tv-dev-ru22` (Block Public Access ON) |
+| IAM user | `bigprint-tv-dev` — policies `BigPrintTvPhase1` + `BigPrintTvPhase2` |
+| Lambda roles | `BigPrintTvCaptureRole`, `BigPrintTvProcessRole` |
+| Functions | `bigprint-tv-capture` (public URL), `bigprint-tv-process` (S3 trigger) |
 | Credentials | `~/.aws/credentials`, `[default]` profile |
 
-**Status:** Textract ✅ · Polly ✅ · S3 ✅ · Bedrock Nova ❌ (account-level
-restriction, all quotas applied as 0 — not a permissions problem)
+Everything the account can do is listed in the five JSON files under `aws/`.
+No part of the system has more access than the file says.
 
 ---
 
-Do these in order. Should take about 20 minutes.
+## Part A — the IAM user (one-off, ~20 minutes)
 
-Everything stays in **one region: `us-east-1`**. Mixing regions causes confusing
-failures later.
+Do these in order.
 
----
+### A1. Create the bucket
 
-## Before you start: choose a bucket name
+1. S3 console → **Create bucket**
+2. Name: `bigprint-tv-dev-ru22` (bucket names are global; pick your own and
+   replace it in every `aws/*.json` file and in `aws/deploy.py`)
+3. Region `us-east-1`, **leave all four Block Public Access boxes ticked**
+4. Create
 
-S3 bucket names are shared across every AWS customer in the world, so yours must
-be unique. Pick something nobody else will have:
+### A2. Nova model access: nothing to do
 
-```
-bigprint-tv-dev-8f2k
-```
+The Bedrock "Model access" page has been retired. Nova is enabled on first
+use; access is governed by IAM only.
 
-Change `8f2k` to any four random characters. **Write this name down — you will
-type it three times.**
+### A3. The user and its two policies
 
----
-
-## Step 1 — Create the S3 bucket
-
-This is where photos get uploaded and audio comes back.
-
-1. Go to the **S3** console: https://s3.console.aws.amazon.com/
-2. Click **Create bucket**
-3. **Bucket name:** the name you chose above
-4. **Region:** US East (N. Virginia) `us-east-1`
-5. **Block Public Access:** leave **all four boxes ticked** (this is the default)
-6. Leave everything else alone
-7. Click **Create bucket**
-
-✅ Done when the bucket appears in your list.
-
----
-
-## Step 2 — Nova model access: nothing to do
-
-**Skip this step.** Checked in the console on 11 Oct 2026: the Model access page
-has been retired. AWS now says serverless foundation models are "automatically
-enabled across all AWS commercial regions when first invoked", so Nova works
-without any manual activation.
-
-Two things still apply:
-
-- **Anthropic models** may ask first-time users for use-case details. Not
-  relevant here — we use Nova.
-- Access is still governed by **IAM** (Step 3) and by Service Control Policies,
-  so the policy below is what actually grants it.
-
-✅ Nothing to do. Go to Step 3.
-
----
-
-## Step 3 — Create the permission policy
-
-This says exactly what the app is allowed to do. Nothing more.
-
-1. Go to **IAM**: https://console.aws.amazon.com/iam/
-2. Left menu → **Policies** → **Create policy**
-3. Click the **JSON** tab
-4. Delete everything in the box
-5. Open `aws/iam-policy-phase1.json` from this project and copy all of it
-6. Paste it into the box
-7. **Find both places that say `REPLACE-WITH-YOUR-BUCKET`** and replace each
-   with your bucket name. There are two — one has `/*` after it, keep that `/*`.
-8. Click **Next**
-9. **Policy name:** `BigPrintTvPhase1`
-10. Click **Create policy**
-
-✅ Done when the policy appears in your policy list.
-
----
-
-## Step 4 — Create the user
-
-1. IAM → left menu → **Users** → **Create user**
-2. **User name:** `bigprint-tv-dev`
-3. **Do NOT** tick "Provide user access to the AWS Management Console" — this
-   user is for code only, it never needs to log in
-4. Click **Next**
-5. Choose **Attach policies directly**
-6. **Leave "Set permissions boundary" unticked** — it is optional and causes
-   confusing failures if set wrong
-7. In the search box type `BigPrintTvPhase1`
-8. Tick **only that one policy**
-9. Click **Next**, then **Create user**
-
-✅ Done when the user appears in your user list.
-
----
-
-## Step 5 — Create the access key
-
-1. Click the user **bigprint-tv-dev**
-2. Open the **Security credentials** tab
-3. Scroll to **Access keys** → **Create access key**
-4. Choose **Application running outside AWS**
-5. Click **Next**, then **Create access key**
-6. You now see an **Access key** and a **Secret access key**
-
-**Keep this page open.** The secret is shown once and never again. If you lose
-it, delete the key and make a new one — no harm done.
-
-⚠️ **Do not paste these into the chat.** The next step puts them on your machine
-where they belong.
-
----
-
-## Step 6 — Put the keys on your computer
-
-Install the AWS command line tool if you do not have it:
+1. IAM → **Policies** → **Create policy** → JSON → paste `aws/iam-policy-phase1.json`
+   (replace `REPLACE-WITH-YOUR-BUCKET`, twice) → name `BigPrintTvPhase1`
+2. IAM → **Users** → **Create user** `bigprint-tv-dev`, no console access,
+   attach `BigPrintTvPhase1` directly
+3. IAM → **Policies** → **Create policy** → JSON → paste
+   `aws/iam-policy-phase2.json` → name `BigPrintTvPhase2`. Then open the user
+   → **Add permissions** → **Attach policies directly** → tick
+   `BigPrintTvPhase2` → **Add permissions**. It must be a *managed* policy
+   like Phase 1, not an inline one: IAM caps all of a user's inline policies
+   at 2,048 non-whitespace characters in total, and Phase 2 is close to that
+   on its own. If an older inline `BigPrintTvPhase2` exists on the user,
+   remove it (user → Permissions → select it → Remove).
+4. **Security credentials** → **Create access key** → *Application running
+   outside AWS* → copy both values once
 
 ```bash
-sudo apt install -y awscli
-```
-
-Then:
-
-```bash
-aws configure
-```
-
-It asks four questions:
-
-| It asks | You type |
-|---|---|
-| AWS Access Key ID | paste the access key |
-| AWS Secret Access Key | paste the secret key |
-| Default region name | `us-east-1` |
-| Default output format | `json` |
-
-Check it worked:
-
-```bash
+python3 -m venv ~/.venv/aws && . ~/.venv/aws/bin/activate && pip install awscli boto3
+aws configure        # paste the key, secret, us-east-1, json
 aws sts get-caller-identity
 ```
 
-✅ Done when it prints your account number and `user/bigprint-tv-dev`.
+What this user **cannot** do: create or change any IAM user, role or policy
+beyond passing the two named roles to Lambda; touch any other bucket; create
+servers or databases; see billing.
 
-If it says "command not found" or "Unable to locate credentials", the keys did
-not save — run `aws configure` again.
+### A4. A spending alarm
 
----
-
-## Step 7 — Set a spending alarm
-
-Textract and Bedrock charge per request. A bug in a loop is the real risk, so
-cap it before the first call.
-
-1. Go to **Billing and Cost Management**:
-   https://console.aws.amazon.com/costmanagement/
-2. Left menu → **Budgets** → **Create budget**
-3. Choose **Use a template (simplified)** → **Monthly cost budget**
-4. **Budget amount:** `20`
-5. **Email:** your email address
-6. Click **Create budget**
-
-✅ Done when the budget appears in the list.
+Billing → **Budgets** → **Create budget** → monthly cost, `20` USD, your email.
+The daily cap in the backend (500 documents, about $40) and reserved
+concurrency keep a bug or an abuser well under this.
 
 ---
 
-## Step 8 — Apply hackathon credits, if you have them
+## Part B — the two Lambda roles (one-off, ~10 minutes)
 
-If the hackathon gave you AWS credits, apply them now so the test run costs
-nothing:
+Lambda functions run as a *role*, not as your user. Each role gets the
+smallest policy that lets its function work. The user cannot create roles (that
+would be a privilege-escalation path), so you do this in the console.
 
-1. **Billing and Cost Management** → left menu → **Credits**
-2. Click **Redeem credit** and enter the code
+For each of the two roles:
+
+1. IAM → **Roles** → **Create role** → *AWS service* → *Lambda* → Next →
+   Next (tick nothing) → name it → **Create role**
+2. Open the role → **Add permissions** → **Create inline policy** → JSON →
+   paste the file → save
+
+| Role name | Policy file | What it allows |
+|---|---|---|
+| `BigPrintTvCaptureRole` | `aws/capture-role-policy.json` | sessions, per-address limits, write photos, voice requests and status files, read results, own logs |
+| `BigPrintTvProcessRole` | `aws/process-role-policy.json` | read photos, its status and documents, Textract, Nova, Polly, write results, a daily counter, own logs |
+
+The capture role deliberately cannot call Textract, Bedrock or Polly: it is the
+only thing on the public internet.
+
+**Check the paste.** Open the role → the policy → *JSON* and compare the `Sid`
+names with the file. The capture role must list `Sessions`,
+`PerAddressLimits`, `StorePhotosVoiceRequestsAndStatus`, `ReadResults`, `OwnLogs`;
+the process role `ReadPhotos`, `WriteResults`, `ReadStatusAndDocuments`,
+`DailyCapCounter`, `ReadDocuments`, `NovaOnly`, `Speech`, `OwnLogs`. A missing
+name means an older copy of the file was pasted; paste the current one over it.
+Policies are versioned in this repository precisely so that this check is
+possible.
 
 ---
 
-## Step 9 — Tell me
+## Part C — deploy (repeatable, ~1 minute)
 
-Say "aws is set up" and I will test every permission with one small call each,
-before we spend anything real. If something is wrong we find it now rather than
-halfway through the accuracy test.
+```bash
+cd backend && . .venv/bin/activate   # or any venv with boto3
+python ../aws/deploy.py
+```
 
----
+It creates or updates both functions, the HTTP API in front of the capture
+function (the public endpoint, throttled to 20 requests a second), the S3
+trigger and the one-day lifecycle rules, then makes one anonymous request to
+the endpoint to prove it is reachable and prints it. Run it with
+`--write-config` to put the endpoint into `src/config.ts`, then rebuild the app.
 
-## What I will need from you next
+Why an API and not the function's own public URL: in this account the public
+Function URL is configured exactly as documented and still answers 403 to
+every anonymous caller (a control above the function, which the deploy user
+cannot see). API Gateway invokes the function as a service principal, so the
+function needs no public policy at all. `--function-url` restores the old
+behaviour for accounts that allow it.
 
-**10 to 20 photos of real letters and bills.**
-
-Make them realistic, not perfect:
-
-- Some taken at an angle
-- Some creased or folded
-- Some in poor light
-- A mix: utility bill, bank letter, hospital or GP letter, handwritten card
-- At least one that is genuinely hard to read
-
-Put them in a folder and tell me the path. Perfect photos would give a flattering
-result that falls apart on real users.
+`python ../aws/deploy.py --status` shows what exists.
 
 ---
 
@@ -217,23 +128,16 @@ result that falls apart on real users.
 
 | Problem | Cause | Fix |
 |---|---|---|
-| `AccessDeniedException` from Bedrock | IAM policy wrong, or model id not matching `amazon.nova-*` | Check Step 3. Note the old "enable model access" fix no longer applies — that page is retired |
-| `Unable to locate credentials` | `aws configure` not run, or run as a different user | Re-run Step 6 |
-| `InvalidAccessKeyId` | Key typed wrong or truncated | Delete the key, create a new one, re-run Step 6 |
-| `NoSuchBucket` | Bucket name in the policy does not match the real bucket | Check all three places the name appears |
-| `AccessDenied` on S3 | Policy has the wrong bucket name, or missing the `/*` line | Edit the policy, check both Resource lines |
-| Bedrock model not listed | Wrong region | Switch the console to `us-east-1` |
-
----
-
-## What this user cannot do
-
-Worth knowing, so you can relax about the keys existing:
-
-- Cannot create or change any IAM user, role or permission
-- Cannot see or change billing
-- Cannot touch any other S3 bucket
-- Cannot create servers, databases or any other resource
-- Can only call Textract, Nova, Polly, and the one bucket
-
-The worst case is an unexpected Textract bill, and Step 7 caps that.
+| `AccessDeniedException` from Bedrock | model id not `amazon.nova-*`, or SCP | check `aws/process-role-policy.json`; the old "enable model access" page no longer exists |
+| `ThrottlingException: Too many tokens per day` on a new account | account verification, not quota | wait; it clears itself. Do not file a quota increase |
+| TV shows "cannot reach the internet" | `CAPTURE_BASE_URL` empty or wrong, or the function URL permission missing | `python ../aws/deploy.py --status`; `curl <url>/health` should return `{"ok": true}` |
+| Phone says "This code is not in use" | the TV session expired (2 h) or the TV was restarted | go back to the pairing screen and scan again |
+| Photo accepted but TV never changes | S3 trigger or process role problem | CloudWatch → `/aws/lambda/bigprint-tv-process`; `aws/deploy.py` re-applies the trigger |
+| `Maximum policy size of 2048 bytes exceeded for user` | pasting a role policy onto the user | role policies go on the roles (Part B), not on the user |
+| `Your policy exceeds the non-whitespace character limit of 2048` when editing `BigPrintTvPhase2` | the limit is the total of all *inline* policies on the user | create Phase 2 as a managed policy and attach it (A3 step 3); delete the inline copy |
+| `POST /session` returns 500; log says `not authorized to perform: s3:PutObject` on `ratelimit/` | the capture role holds an older policy without `PerAddressLimits` | paste `aws/capture-role-policy.json` over it (see "Check the paste") |
+| Log line `s3 get …: AccessDenied, treated as missing` | S3 answers 403, not 404, for a missing key when the caller cannot list the bucket; the functions treat that as "not there" | harmless on its own. If it appears for a key that exists, that role's policy is wrong |
+| `NoSuchBucket` / `AccessDenied` on S3 | bucket name mismatch | the name appears in every `aws/*.json` file and in `aws/deploy.py` |
+| Textract `UnsupportedDocumentException` | HEIC or WebP | the phone page converts to JPEG; `run_batch.py` skips other formats |
+| **The endpoint answers 403 `AccessDeniedException` to everyone** (TV shows "The reading service refused this TV (error 403)"), while a direct invoke works | for a Function URL: configured correctly and still refused by a control above the function (seen in this account on 16 Oct 2026); for the API: the `api-gateway` permission statement is missing on the function | `python ../aws/deploy.py` makes an anonymous `GET /health` and reports. The API route is the default precisely because of this; if even the API is refused, ask whoever administers the AWS organisation which guardrail applies |
+| `apigateway:GET … not authorized` from `deploy.py` | the user's phase-2 policy predates the API | paste the current `aws/iam-policy-phase2.json` over `BigPrintTvPhase2` (Part A, step 3) |

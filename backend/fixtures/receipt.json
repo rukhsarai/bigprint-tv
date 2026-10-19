@@ -1,0 +1,46 @@
+{
+  "id": "doc-1792119062-7c5592cdb1fb",
+  "kind": "Receipt",
+  "sender": "Brewers Restaurant and Sports Bar",
+  "keyFacts": [
+    {
+      "label": "Total",
+      "value": "26.91",
+      "confidence": 100
+    },
+    {
+      "label": "Date",
+      "value": "3/17/2017",
+      "confidence": 100
+    },
+    {
+      "label": "Reference",
+      "value": "834-5",
+      "confidence": 100
+    },
+    {
+      "label": "Phone",
+      "value": "928-783-0073",
+      "confidence": 99.6
+    }
+  ],
+  "lines": [
+    "This is a receipt from Brewers Restaurant and Sports Bar.",
+    "The total amount to pay is 26.91.",
+    "The order number is 834-5.",
+    "The table number is 315.",
+    "The server was Steve A.",
+    "The date of the order is March 17, 2017.",
+    "The time of the order is 1:13 PM.",
+    "One BLT Sandwich costs 8.99.",
+    "Tater Tots cost 0.99.",
+    "One Corned Beef Tacos cost 7.99.",
+    "One Side Fries cost 2.99.",
+    "The subtotal is 20.96.",
+    "The tax is 2.18.",
+    "The 18% gratuity is 3.77.",
+    "More items are listed on the receipt."
+  ],
+  "lowConfidence": false,
+  "createdAt": 1792119075
+}

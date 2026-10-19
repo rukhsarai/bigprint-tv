@@ -1,8 +1,8 @@
 # BigPrint TV — project context
 
 **Read this first.** It is the handover document: what the product is, what is
-built, what is still fake, and the decisions that would be expensive to
-rediscover. Last updated 12 October 2026.
+built, what is still unverified, and the decisions that would be expensive to
+rediscover. Last updated 19 October 2026.
 
 ---
 
@@ -12,7 +12,10 @@ A Fire TV app for people who cannot comfortably read paper post — primarily
 older people with age-related sight loss.
 
 Someone photographs a letter with a phone. It appears on the television in very
-large print, and can be read aloud with the current word highlighted.
+large print, to read: the whole letter in plain English, its main points, or
+the exact words. Someone who would rather listen presses Listen and hears the
+whole letter in a natural voice, made on request so unheard letters cost
+nothing.
 
 **Scope is short documents that arrive on paper and must be understood** —
 bills, hospital letters, council letters, medicine labels, cards. Not books: a
@@ -20,7 +23,8 @@ bills, hospital letters, council letters, medicine labels, cards. Not books: a
 better. One or two pages of anything is fine.
 
 The TV is the right surface because the user already owns a large screen, sits
-two metres from it, and is unafraid of the remote. The phone is only a camera.
+two metres from it, and is unafraid of the remote. The phone is only a camera,
+and it is usually held by a relative or carer.
 
 ---
 
@@ -31,16 +35,15 @@ Entered in the **Amazon Developer Hackathon**, Fire TV track (Vega OS).
 - **Deadline: 24 October 2026, 00:00 GMT+5**
 - Devpost: https://amazonappdev2026.devpost.com/
 - Fire TV priority categories that fit: **computer vision**, **multi-modal UX**
-- Also eligible for the **AWS Builder** mini challenge (uses Textract, Bedrock
-  Nova, Polly, S3) and the **Open Source** mini challenge
+- Also eligible for the **AWS Builder** mini challenge (Lambda, S3, Textract,
+  Bedrock Nova Lite + Pro, Polly) and the **Open Source** mini challenge (MIT)
 
 **Submission requires:** text description, GitHub repo (public with a licence,
 or private with Amazon reviewers added as collaborators), a demo video under
 3 minutes showing the app running on a real Fire TV or the Vega simulator,
 and product feedback on every tool and SDK used.
 
-**Friction logs earn up to a 10% judging bonus** — see `FRICTION_LOG.md`, which
-already has six real entries.
+**Friction logs earn up to a 10% judging bonus** — see `FRICTION_LOG.md`.
 
 Judging criteria: Tech Implementation, Design, Potential Impact, Quality of Idea.
 
@@ -48,36 +51,65 @@ Judging criteria: Tech Implementation, Design, Potential Impact, Quality of Idea
 
 ## 3. Status
 
-### Works
+### Built and tested
 
 | | |
 |---|---|
 | Vega app | Builds, installs, runs on the Vega virtual device |
-| Pairing screen | QR code + 4-digit code, waiting and error states |
-| Document view | Large print, D-pad line navigation, read-aloud with word highlight |
+| Pairing screen | QR code carrying a session secret, 6-digit confirmation code, connecting / waiting / reading / error states |
+| Document view | Large print, D-pad line navigation, three views (full letter, main points, exact words), Listen (the whole letter read aloud, voice made on request), Next photo |
 | Text size | 1x / 1.25x / 1.5x / 2x, persisted, shared across screens |
-| Accessibility | Audited against Amazon's A11Y Compass and fixed |
-| Tests | 26 passing, typecheck clean, 0 lint errors |
-| AWS pipeline | Textract → Nova → Polly proven on 18 real photographs |
+| Colours | Dark (default), Light, Yellow on black; chosen at first run, one Colours button on every screen, persisted (`src/theme/`) |
+| Accessibility | Audited against Amazon's A11Y Compass and fixed; new states have spoken equivalents |
+| Backend | Two Lambdas + S3 behind an API Gateway HTTP API, deployed; see `backend/README.md` |
+| Pipeline | Textract LAYOUT+TABLES (headings kept) → Nova Lite classify → AnalyzeExpense + Nova Pro image cross-check → Nova Pro rewrite with the letter fenced as data → currency guard → whole-figure numeric guard. Polly neural, the whole letter as one story, only when someone presses Listen |
+| Tests | App: 156 Jest tests (including WCAG contrast for every colour pair), typecheck clean, 0 lint errors. Backend: 37 unit tests |
+| Round trip | `backend/tools/round_trip.sh` pairs, uploads a synthetic bill, polls, asks for the voice and fetches the audio from any machine. 19 Oct: text in 8–12 s with 5 of 5 key facts right, voice in 3–4 s |
+| Abuse limits | 128-bit session secret, JPEG-only 4 MB uploads, 20 per session, 40 sessions and 80 uploads per address per day, a 200 docs/day cap spent only after a real read, 1-day data expiry |
 
-### Still fake
+### Unverified
 
-- **Document delivery is a `setTimeout`.** `createMockDocumentService` in
-  `src/services/documentService.ts` delivers a sample after 6 seconds. No
-  network call exists in the app.
-- **Read-aloud produces no sound.** The word highlight is driven by a timer
-  using locally generated speech marks. Polly is proven to work but is not
-  wired into the app.
-- **The QR points nowhere.** `CAPTURE_BASE_URL` is
-  `https://bigprint.tv/scan` — that domain has no DNS record.
+- **Virtual device, 16 October:** this branch builds, installs and launches on
+  the x86_64 virtual device (cold launch under a second), D-pad input works,
+  and the whole pairing → phone photo → OCR → document flow ran against the
+  live backend through the API Gateway HTTP API (upload to document on screen
+  in about 8 s, two real photos read correctly). Read-aloud plays on the
+  virtual device once the manifest declares the audio services under
+  `[wants]`; an earlier note that the audio services "cannot be bound" there
+  was wrong.
+- **Open layout bug: the pairing-screen instructions can overflow.** Seen
+  at 1x on the virtual device: step 2 cut at the ScrollView's edge with the
+  status line over it, step 3 out of view. The numbers only reproduce at a
+  logical window around 960×540 (a density-2 screen), where every step
+  wraps to two lines. The pairing screen's debug line shows the window size;
+  read it off the screen on the next run. If it is 960×540 the fix is a
+  one-line title and one-line steps at 1x; the steps must not scroll, since
+  nothing in them can take focus. Check at 1x, 1.5x and 2x before recording.
+- **Nothing has been run on a physical Fire TV**, and VoiceView has never been
+  run against it. For an accessibility product that is a real gap — the markup
+  is correct by construction, not confirmed by ear.
+- **Audible confirmation, pause and resume.** Playback was verified from the
+  media pipeline's events (`playing → ended`) for one line of the old
+  per-line voice, not by ear. Listen, Pause, Carry on listening, and a letter
+  long enough to need two parts are unconfirmed on a device. If the voice
+  cannot be made or played, the button says No voice; the text is unaffected.
+- **The phone page on a real iPhone.** HEIC → JPEG conversion relies on Safari
+  decoding HEIC into a canvas, which it does on iOS 11+, but it has only been
+  reasoned about, not tapped.
+- **The app icon.** `assets/image/icon.png` (512×512) is referenced from
+  `manifest.toml` as `icon = "@image/icon.png"`, the form the Vega manifest
+  reference gives. Not yet through `vega exec vpt validate manifest.toml` or
+  a build; if validation rejects the key, remove that one line.
+- **Lambda retry policy.** `aws/deploy.py` sets the processing function to zero
+  async retries so a timed-out read is not re-run at full price; that call needs
+  `lambda:PutFunctionEventInvokeConfig`, which is in the current
+  `aws/iam-policy-phase2.json` but may not be on the user yet. Processing is
+  idempotent either way (a retry sees the finished status and stops).
 
 ### Not started
 
-- Phone capture page (decision made: AWS Lambda Function URL — see §8)
-- Git repository and GitHub (required for submission)
-- Demo video
-- App icon (512×512 PNG; `vega project doctor` flags its absence)
-- Fire OS build (separate project, probably out of scope before the deadline)
+- Demo video (script and shot list in `SUBMISSION.md` §5)
+- Fire OS build (separate project, out of scope before the deadline)
 
 ---
 
@@ -101,29 +133,44 @@ npm start          # then press j for React Native DevTools
 `vega` is sourced from `~/vega/env` by `~/.bashrc`. **Non-interactive shells
 exit `.bashrc` early**, so scripts must `source ~/vega/env` explicitly.
 
+`src/config.ts` decides the backend: empty `CAPTURE_BASE_URL` → built-in mock
+(no network, sample document after 6 s); a URL → the real Lambda.
+
 ---
 
 ## 5. Code map
 
 ```
 src/
-  App.tsx                      owns the pairing code, routes on delivery status
-  screens/PairingScreen.tsx    QR, 4-digit code, waiting/error, text size
-  screens/DocumentView.tsx     large print, line navigation, word highlight
+  config.ts                    backend URL and poll interval
+  App.tsx                      picks mock or remote service, routes on status
+  screens/PairingScreen.tsx    QR, 6-digit code, connecting/waiting/reading/error, text size
+  screens/DocumentView.tsx     large print, line navigation, views, Listen, Next photo
   hooks/useTextScale.ts        text size + persistence, shared by both screens
-  hooks/useReadAloud.ts        drives word highlighting from speech marks
-  hooks/useIncomingDocument.ts waiting / arrived / error, subscription teardown
-  services/documentService.ts  THE SEAM — swap the mock for the real transport
+  hooks/useListen.ts           the whole letter read aloud: ask, play the parts, pause
+  hooks/useDocumentViewChoice.ts full letter / main points / exact words, remembered
+  hooks/useIncomingDocument.ts connecting/waiting/processing/arrived/error; holds a
+                               second page until the reader presses Next photo
+  services/documentService.ts  THE SEAM — mock and remote (session, polling, renewal)
+  services/audioPlayer.ts      tiny player interface + media-element wrapper
+  services/vegaAudio.ts        Vega W3C media AudioPlayer behind that interface
   data/documents.ts            GENERATED from real photos, do not hand-edit
-  data/speechMarks.ts          Polly-shaped speech marks + local generator
 backend/
-  pipeline.py                  photo → OCR → classify → facts → plain English
-  run_batch.py                 whole bucket, accuracy report
+  lambda_capture.py            public endpoint: session, page, upload, result, voice, audio
+  capture_page.html            the phone page
+  lambda_process.py            S3-triggered: a photo → text; a voice request → audio
+  pipeline.py                  photo → OCR → classify → facts → plain English → guard
+  speech.py                    Polly: the whole letter as one story, in parts if long
+  tests/                       unit tests (python -m unittest discover backend/tests)
+  run_batch.py                 accuracy report over the bucket
   gen_fixtures.py              regenerates src/data/documents.ts
 aws/
-  iam-policy-phase1.json       Textract, Bedrock Nova, Polly, S3 (APPLIED)
-  iam-policy-phase2.json       Lambda + scoped PassRole (NOT YET APPLIED)
-  lambda-execution-role-*.json for the capture Lambda
+  iam-policy-phase1.json       user: Textract, Nova, Polly, the bucket (APPLIED)
+  iam-policy-phase2.json       user: manage bigprint-tv-* Lambdas, pass the two roles (APPLIED)
+  capture-role-policy.json     BigPrintTvCaptureRole
+  process-role-policy.json     BigPrintTvProcessRole
+  deploy.py                    idempotent create-or-update of everything
+test/mocks/w3cmedia.js         Jest stand-in for the native media package
 ```
 
 ---
@@ -132,15 +179,15 @@ aws/
 
 | | |
 |---|---|
-| Account | 236605144361 |
+| Account | `236605144361` |
 | Region | `us-east-1` — stay in it |
 | Bucket | `bigprint-tv-dev-ru22` (Block Public Access ON) |
-| IAM user | `bigprint-tv-dev`, policy `BigPrintTvPhase1` |
-| Credentials | `~/.aws/credentials`, `[default]` profile |
+| IAM user | `bigprint-tv-dev`, policies `BigPrintTvPhase1` + `BigPrintTvPhase2` |
+| Roles | `BigPrintTvCaptureRole`, `BigPrintTvProcessRole` |
+| Functions | `bigprint-tv-capture` (behind API Gateway HTTP API `7y24w49ro6`), `bigprint-tv-process` |
 
-All four services verified working: Textract, Bedrock Nova, Polly, S3.
-
-Setup steps and troubleshooting: `AWS_SETUP.md`.
+Setup steps and troubleshooting: `AWS_SETUP.md`. Architecture, trust model and
+cost: `backend/README.md`.
 
 **Python tooling note:** Ubuntu 24.04 has no `awscli` package and Python is
 externally managed. Use a venv; do not `pip install` system-wide.
@@ -158,9 +205,7 @@ university marks certificate it confidently reported `SUBTOTAL 3.32`,
 `TAX 3.37`, `TOTAL 215.9` — none of which were money.
 
 So the pipeline **classifies first with Nova**, and only runs `AnalyzeExpense`
-when the document is genuinely financial. An earlier conclusion — "take key
-facts from Textract, not Nova" — was drawn from one clean synthetic bill and
-was wrong on real documents.
+when the document is genuinely financial.
 
 ### Key figures come from Textract, never from the language model
 
@@ -168,36 +213,104 @@ Nova rewrites prose. It is never asked to copy numbers, because it silently
 drops them: on the first synthetic bill it returned the amount due but omitted
 the due date Textract had read at 97.9%.
 
+Nova Pro *is* shown the photo and asked for the same figures — but only so it
+can **veto** a Textract reading it disagrees with. A disputed money figure is
+hidden and the page is flagged low-confidence. Nova can never add a figure.
+
+### A letter is data, not instructions
+
+Scam post targets exactly this audience. The model's rules live in the system
+turn and the OCR text is fenced as `<letter>…</letter>` with an explicit rule
+that text addressed to a computer is reported, not obeyed. Key figures never
+come from the model, so an injected "you owe £820" cannot become a pinned fact.
+
+### Every number the model writes must exist in the OCR text
+
+On a real fuel receipt the first pipeline produced "The amount for diesel is 8"
+and "The total amount is 1" — real digits, wrong rows. Two fixes:
+
+1. **OCR with layout and tables.** `DetectDocumentText` returns a table as a
+   column of cells, so the model had to guess which numbers belonged together.
+   `AnalyzeDocument` with LAYOUT + TABLES lets `structure_blocks()` rebuild
+   each row as `cell | cell | cell` in reading order. 12× the OCR price, still
+   under a quarter of the per-document cost.
+2. **`numeric_guard()`.** A rewritten line whose figures are not all on the
+   page is dropped. A figure is matched whole and in order ("76.44" matches
+   "£76.44", "44.76" does not; the "8" in "28.8" never counts as an 8), so
+   recalculated, transposed and invented numbers go, while regrouped phone
+   numbers and spoken money ("92 pounds 58") survive. Empty table cells keep
+   their column and values are paired with their headings, which is what
+   prevents right-digits-wrong-row.
+
 ### Anything below 90% confidence is dropped, not shown
 
 For a reader who cannot easily check the paper, a confidently wrong amount is
 worse than no amount. `lowConfidence` triggers the on-screen warning.
 
-### OCR flattens tables, so the rewrite must rebuild them
+### The secret lives only in the QR code
 
-Textract returns one cell per line. A naive rewrite produced `"100"`, `"85"`,
-`"3"`, `"3.75"` — meaningless read aloud. The prompt now requires whole
-sentences and recombines table rows (`"Islamic Studies: 85 out of 100, grade
-point 3.75."`). `_is_speakable()` drops fragments that slip through.
+A 4-digit code that anyone could type was an open door: 10,000 guesses to push
+a document onto a stranger's TV, or read theirs. Now the backend issues a
+6-digit code **and** a 128-bit secret; every S3 key is a hash of both. The code
+is shown on the TV and echoed on the phone purely so people can see they match.
+Manual code entry was removed: there is no domain to type, and the secret
+cannot be typed anyway.
+
+### The public function cannot call any AI service
+
+`bigprint-tv-capture` can write a photo and read a result, nothing else. If the
+public endpoint is abused, the worst case is bounded by the processing
+function's daily cap, not by the attacker's imagination. The review panel found
+the first version of that cap could be exhausted by anyone with curl in a
+minute, taking the service down for every real user until midnight: it is now
+spent only after a photo has actually been read, every address gets 40 sessions
+and 80 uploads a day, and the counters use S3 conditional writes.
+
+### Reading and listening are separate, and the voice is made on request
+
+Reading on the TV is the main use. Testing showed a word-by-word highlight
+read as blinking, and a voice that drives the screen helps neither the reader
+(things move) nor the listener (who is not looking). So the text is only for
+reading, and the voice is the whole letter as one story, start to finish,
+with one button: Listen, Pause, Carry on listening. Nothing on screen
+follows it, and changing the view does not stop it.
+
+The voice was more than half of what a letter cost ($0.05 of $0.08, with a
+second Polly call per line for word timings). It is now made only when
+someone presses Listen: the capture function claims it once per letter with a
+conditional write and drops a `voice/<sid>/<doc>.json` object, whose S3 event
+runs the processing function, which still holds the only Polly permission. It
+says what the page is and any low-confidence warning first, since a listener
+cannot see either. Past Polly's 3,000-character limit it is split between
+sentences into parts the TV plays back to back; Polly bills by character, so
+parts cost nothing extra.
+
+### Second page? Hold it until Next photo
+
+A carer may photograph three pages in a row. A new document never replaces the
+one being read; it is held, the button changes to "Next photo is ready", and
+it is shown when the reader presses it (or Back on the remote). With nothing
+held, Next photo shows the code again; the phone page already offers "Send
+another page", so the session carries on without pairing again.
 
 ### HEIC fails outright
 
 Textract rejects it with `UnsupportedDocumentException`. **iPhones shoot HEIC by
-default**, so the capture page must convert to JPEG before upload. One of the
-18 test photos was HEIC.
+default**, so the phone page draws the photo onto a canvas and re-encodes it as
+JPEG before upload (this also downscales to 2000 px and applies rotation).
 
 ### Accessibility: static text is unreachable on Fire TV
 
 The screen reader follows **input focus**, so text that cannot be focused is
 never spoken. The key facts were static — a blind user would never have heard
-the amount due, which is the app's entire purpose. They are now linked to the
+the amount due, which is the app's entire purpose. They are linked to the
 first line with `accessibilityDescribedBy`. There is a regression test; do not
-remove it.
+remove it. The pairing code is linked to the first button for the same reason,
+and the QR frame's label tells a blind user what to ask a helper to do.
 
 Related: the Vega accessibility props (`accessibilityDescribedBy`,
 `accessibilityOrientationText`) **only type-check when components are imported
-from `@amazon-devices/react-native-kepler`**, not from `react-native`. The
-template imports from `react-native`, so this bites immediately.
+from `@amazon-devices/react-native-kepler`**, not from `react-native`.
 
 Also: use `role` / `aria-label` / `aria-disabled`, not the deprecated
 `accessibilityRole` / `accessibilityLabel` / `accessibilityState`. `role="text"`
@@ -212,9 +325,7 @@ version scrolled the pairing code off screen, which defeats the feature.
 ### No Alexa for reading or payments
 
 An Alexa skill cannot see the app's screen or drive the highlight; Vega's Alexa
-integration (VSK) is for catalog search and playback. Polly is required because
-only it returns **speech marks** — word-level timings — which is what makes
-synchronised highlighting possible.
+integration (VSK) is for catalog search and playback.
 
 Payments were considered and rejected: no third-party Alexa payment API exists,
 Amazon IAP is for digital goods, payment initiation is regulated, and the amount
@@ -222,28 +333,21 @@ comes from OCR that may be wrong. Show how to pay instead.
 
 ---
 
-## 8. Next step (decided, not yet built)
+## 8. Next steps
 
-**A single Lambda with a Function URL** serves the capture page and issues
-presigned S3 uploads. Chosen over Vercel, Amplify and S3+CloudFront because it
-is one resource, gives a free HTTPS URL, needs no domain, and keeps AWS
-credentials inside AWS.
+The ordered pre-submission checklist is `SUBMISSION.md` §8. In short:
 
-- `GET /?c=1234` → capture page HTML
-- `POST /upload` → presigned S3 PUT to `uploads/<code>/<uuid>.jpg`
+0. Work from `main`; it holds all the code and is what judges clone.
+1. Run on a physical Fire TV with VoiceView on. Listen to every state.
+2. Scan the QR with a real iPhone and a real Android phone.
+3. Record the demo video: phone → TV round trip, read-aloud, text size, under
+   three minutes.
+4. Validate the icon key in `manifest.toml` with `vega exec vpt validate`.
+5. Submit on Devpost with the friction log and tool feedback.
 
-**Blocked on:** the user creating `BigPrintTvCaptureRole` in the console and
-attaching `aws/iam-policy-phase2.json` to `bigprint-tv-dev`. `iam:CreateRole`
-was deliberately **not** requested — it is a privilege-escalation path. The
-agent gets `iam:PassRole` scoped to that one role ARN instead.
-
-**Known risk:** a Function URL with `AuthType: NONE` is a public upload
-endpoint. Mitigate with code validation, size and content-type limits, short
-presign expiry, random keys. Add an S3 lifecycle rule deleting `uploads/` after
-a day or two — these are photographs of people's private post.
-
-After that: wire `documentService.ts` to the real backend, swap the read-aloud
-timer for Polly audio, app icon, git repo, demo video.
+After the hackathon: CloudFront + rate limiting in front of the capture URL,
+a per-TV allow-list so only a paired phone can send, and a batch mode that
+lets a carer photograph several pages and have them queued on the TV.
 
 ---
 
@@ -251,26 +355,25 @@ timer for Polly audio, app icon, git repo, demo video.
 
 | | |
 |---|---|
-| **Spaces in the project path break the build** | `kepler-module-manifest-builder` shells out unquoted. The folder was renamed from `vega os and fire tv env` for this reason. Never reintroduce spaces. |
+| **Spaces in the project path break the build** | `kepler-module-manifest-builder` shells out unquoted. Never reintroduce spaces. |
 | `console.log` is invisible in Metro on RN 0.83 | Static Hermes. Output only appears in React Native DevTools. |
-| `POST /open-debugger` silently does nothing | Returns 200, logs "Launching DevTools...", no browser. `DISPLAY` was correctly set. Launch Chrome manually with the `devtoolsFrontendUrl` from `/json/list`. |
+| `POST /open-debugger` silently does nothing | Launch Chrome manually with the `devtoolsFrontendUrl` from `/json/list`. |
 | Port forwarding is lost on every device restart | Re-run `start-port-forwarding`. Most common cause of "hot reload stopped working". |
-| Screenshots do not work on the virtual device | `gwsi-tool-screenshooter` is physical-hardware only, so visual checks need human eyes. `vega device info` also returns empty `product`, so the documented vvrp check fails. |
-| `vega project doctor` flags supported libraries | `react-native-qrcode-svg` is reported as "not a managed OS-version package". It is a false alarm; the build links it correctly. |
-| AsyncStorage needs a Jest mock | Not mentioned in the Vega docs. Wired up in `test/setup.js`. |
-| Bedrock was blocked for hours | All quotas applied as 0 while defaults were in the millions; error was `ThrottlingException: Too many tokens per day`. It was **account verification**, not quota. It cleared itself. Do not file a quota increase for this — the blocking quota is marked Not adjustable. |
-| The snapshot test was flaky | The pairing code is random. `Math.random` is pinned in `test/App.spec.tsx`. |
+| Screenshots do not work on the virtual device | `gwsi-tool-screenshooter` is physical-hardware only. |
+| `vega project doctor` flags supported libraries | `react-native-qrcode-svg` and `react-native-w3cmedia` are reported as "not a managed OS-version package". False alarm; the build links them. |
+| AsyncStorage and w3cmedia need Jest mocks | Wired up in `test/setup.js` and `jest.config.json` → `test/mocks/`. |
+| Bedrock was blocked for hours on a new account | `ThrottlingException: Too many tokens per day` with all quotas at 0 was **account verification**, not quota. It cleared itself. |
+| Inline policies on a user share a 2048-byte limit | Role policies go on the roles. Pasting one onto the user fails with "Maximum policy size exceeded". |
+| The snapshot test was flaky | `Math.random` is pinned in `test/App.spec.tsx`. |
 
 ---
 
 ## 10. Honest assessment
 
-The app is well built and genuinely accessible. The pipeline works on real
-photographs — OCR scored above 93% on 13 of 17 images.
-
-**What is unproven:** nothing has been tested on a physical Fire TV, and
-VoiceView has never been run against it. For an accessibility product that is a
-real gap — the markup is correct by construction, not confirmed by ear.
+The pipeline is deliberately conservative: it would rather say nothing than
+say a wrong number, and it tells the reader when it is unsure. The OCR scored
+above 93% on 13 of 17 real photographs in the first batch; the layout-aware
+pipeline has been run on the same photographs plus a set of sample invoices.
 
 **The bigger risk is not technical.** Reaching an 82-year-old with macular
 degeneration is harder than building this. They do not browse app stores.

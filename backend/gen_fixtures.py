@@ -1,83 +1,80 @@
-"""Run the pipeline on chosen photos and emit src/data/documents.ts."""
-import json, sys
-from pipeline import Pipeline, to_app_json
+"""Regenerate src/data/documents.ts from saved pipeline output.
 
-BUCKET = "bigprint-tv-dev-ru22"
-# Chosen to cover the range the app must handle:
+The JSON files in backend/fixtures/ are results exactly as the processing
+function wrote them to S3 (minus the audio timings, which the mock service
+does not use). They come from public sample receipts, not from anyone's post,
+so they can live in the repository. Refresh one by running a sample through
+the deployed backend and saving results/<sid>/<docId>.json here.
+
+    python backend/gen_fixtures.py
+"""
+import json
+import os
+import re
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+FIXTURES = os.path.join(HERE, "fixtures")
+TARGET = os.path.join(HERE, "..", "src", "data", "documents.ts")
+
+# (file, exported name, why it is in the set)
 PICKS = [
-    ("IMG_20261011_215046.jpg", "sampleReceipt",    "financial, key facts present"),
-    ("IMG_20261011_214928.jpg", "sampleCertificate","non-financial, numbers that must NOT be read as money"),
-    ("IMG_20261011_215107.jpg", "sampleSchedule",   "dense page, no sender figures"),
-    ("IMG_20261011_214705.jpg", "samplePoorScan",   "61.8% OCR — the low-confidence path"),
+    ("receipt.json", "sampleReceipt", "financial, every figure cross-checked"),
+    ("letter.json", "sampleLetter", "non-financial, numbers that must NOT be read as money"),
+    ("invoice.json", "sampleInvoice", "dense page with a table, flagged low confidence"),
+    ("poor-scan.json", "samplePoorScan", "tiny blurry photo, the low-confidence path"),
 ]
 
-pipe = Pipeline()
-docs = []
-for key, var, why in PICKS:
-    print(f"running {key} ...", flush=True)
-    d = pipe.run(bucket=BUCKET, key=key, doc_id=var)
-    docs.append((var, why, to_app_json(d), d.diagnostics))
 
 def ts(v):
     return json.dumps(v, ensure_ascii=False)
 
-out = ['''/**
- * Real documents, produced by running backend/pipeline.py over photographs
- * in the bigprint-tv-dev-ru22 bucket. Regenerate with:
- *
- *     cd backend && python gen_fixtures.py
- *
- * These are genuine Textract + Nova output, not hand-written examples, so the
- * app is exercised against the messiness of real OCR.
- */
 
-export type DocumentFact = {
-  label: string;
-  value: string;
-  /** Textract confidence. Anything below 90 was dropped by the pipeline. */
-  confidence?: number;
-};
-
-export type ScannedDocument = {
-  id: string;
-  /** What kind of document this is, in plain words. */
-  kind: string;
-  /** Who sent it. Absent for things with no sender, like a card or a label. */
-  sender?: string;
-  /**
-   * Figures a reader must not get wrong. Pinned on screen and never scrolled
-   * past. Empty for documents that have none — the pipeline only extracts
-   * these when the document is classified as a bill or receipt.
-   */
-  keyFacts: DocumentFact[];
-  /** Body text, rewritten into plain English, already split into lines. */
-  lines: string[];
-  /** True when OCR confidence was low, so the UI warns instead of pretending. */
-  lowConfidence: boolean;
-};
-''']
-
-for var, why, d, diag in docs:
+def render(name, why, d):
     sender = f"\n  sender: {ts(d['sender'])}," if d.get("sender") else ""
     facts = "".join(
         f"\n    {{label: {ts(f['label'])}, value: {ts(f['value'])}, confidence: {f['confidence']}}},"
-        for f in d["keyFacts"]
-    ) or ""
+        for f in d.get("keyFacts", [])
+    )
     lines = "".join(f"\n    {ts(l)}," for l in d["lines"])
-    out.append(f"""
-/** {why}. OCR {diag.get('ocrConfidence')}%, financial={str(diag.get('isFinancial')).lower()}. */
-export const {var}: ScannedDocument = {{
+    summary = "".join(f"\n    {ts(l)}," for l in d.get("summary") or [])
+    exact = "".join(
+        f"\n    {{text: {ts(e['text'])}, kind: {ts(e['kind'])}}},"
+        for e in d.get("exact") or []
+    )
+    extra = ""
+    if summary:
+        extra += f"\n  summary: [{summary}\n  ],"
+    if exact:
+        extra += f"\n  exact: [{exact}\n  ],"
+    return f"""
+/** {why}. */
+export const {name}: ScannedDocument = {{
   id: {ts(d['id'])},
   kind: {ts(d['kind'])},{sender}
   keyFacts: [{facts}
   ],
   lines: [{lines}
-  ],
+  ],{extra}
   lowConfidence: {str(d['lowConfidence']).lower()},
 }};
-""")
+"""
 
-names = ", ".join(v for v, _, _, _ in docs)
-out.append(f"\nexport const sampleDocuments: ScannedDocument[] = [{names}];\n")
-open(sys.argv[1], "w").write("".join(out))
-print("wrote", sys.argv[1])
+
+def main():
+    with open(TARGET, encoding="utf-8") as f:
+        current = f.read()
+    header = current[: current.index("\n/**", current.index("export type ScannedDocument"))]
+    header = re.sub(r"\n/\*\*.*?\*/\nexport const.*", "", header, flags=re.S)
+    out = [header.rstrip("\n") + "\n"]
+    for file, name, why in PICKS:
+        with open(os.path.join(FIXTURES, file), encoding="utf-8") as f:
+            out.append(render(name, why, json.load(f)))
+    names = ", ".join(name for _, name, _ in PICKS)
+    out.append(f"\nexport const sampleDocuments: ScannedDocument[] = [{names}];\n")
+    with open(TARGET, "w", encoding="utf-8") as f:
+        f.write("".join(out))
+    print(f"wrote {TARGET} with {len(PICKS)} documents")
+
+
+if __name__ == "__main__":
+    main()

@@ -13,7 +13,11 @@ export type TextScale = {
   scaleIndex: number;
   /** True once the saved preference has been read. */
   restored: boolean;
-  /** Multiply a base font size by the current scale. */
+  /**
+   * Multiply a base font size by the current scale. Screens pass the result
+   * to `type()` from theme/layout, which adds the line height every wrapping
+   * text needs.
+   */
   scaled: (size: number) => number;
   /** Step the scale up (1) or down (-1) and persist it. */
   changeScale: (direction: 1 | -1) => void;
@@ -71,7 +75,6 @@ export const useTextScale = (): TextScale => {
   );
 
   const scale = SCALE_STEPS[scaleIndex];
-
   return {
     scale,
     scaleIndex,

@@ -4,16 +4,17 @@ schema-version = 1
 title = "BigPrint TV"
 version = "0.1.0"
 id = "com.bigprint.tv"
+# 512 x 512 PNG under assets/image, shown in Settings > Applications. The
+# @image/ prefix is how the manifest refers to that folder.
+icon = "@image/icon.png"
 
 [os.version]
 min = "1.2"
 target = "1.2"
 
 [needs]
-# Audio playback for the Polly read-aloud feature.
-[[needs.privilege]]
-id = "com.amazon.system.audio"
-
+# No privileges: audio playback through the W3C media module needs none, and
+# "com.amazon.system.audio", declared here before, exists nowhere in the SDK.
 [[needs.module]]
 id = "/com.amazon.vega.os@IVega_1_2"
 
@@ -25,6 +26,61 @@ id = "/com.amazon.kepler.svg_3@ISVG_0"
 
 [[needs.module]]
 id = "/com.amazon.kepler.async_storage__async_storage_2@IAsyncStorage__AsyncStorage_1"
+
+# Read-aloud audio (W3C media AudioPlayer) and the two modules it depends on.
+# The build's autolinking appends these two if they are missing, which left
+# the working tree dirty after every build; declaring them keeps it clean.
+[[needs.module]]
+id = "/com.amazon.kepler.w3cmedia_2@IW3cmedia_3"
+
+[[needs.module]]
+id = "/com.amazon.kepler.kepler_media_controls_1@IKeplerMediaControls_0"
+
+[[needs.module]]
+id = "/com.amazon.kepler.keplermediadescriptor_1@IKeplermediadescriptor_1"
+
+# Media and audio services for the W3C media AudioPlayer (read-aloud). With no
+# [wants] at all the device refused the IPC connection ("unauthorized access:
+# missing [[wants.service]] manifest declaration, service =
+# com.amazon.audio.system") and read-aloud was silent, with nothing in the app
+# log but "MediaPlayer: pause". Verified fixed on the virtual device, 16 Oct
+# 2026. The list mirrors Amazon's Vega TV Interfaces sample manifest minus its
+# input, network and DRM services, which this app does not use; it has not
+# been trimmed further. com.amazon.audio.system is the one the device log
+# named, and the media-player setup guide's list does not mention it:
+# declaring audio.stream and audio.control without it still fails.
+[wants]
+[[wants.service]]
+id = "com.amazon.media.server"
+
+[[wants.service]]
+id = "com.amazon.media.playersession.service"
+
+[[wants.service]]
+id = "com.amazon.mediabuffer.service"
+
+[[wants.service]]
+id = "com.amazon.mediatransform.service"
+
+[[wants.service]]
+id = "com.amazon.mediametrics.service"
+
+[[wants.service]]
+id = "com.amazon.audio.stream"
+
+[[wants.service]]
+id = "com.amazon.audio.control"
+
+[[wants.service]]
+id = "com.amazon.audio.system"
+
+[[wants.service]]
+id = "com.amazon.gipc.uuid.*"
+
+# The media pipeline talks back to the app over a per-app UUID service.
+[offers]
+[[offers.service]]
+id = "com.amazon.gipc.uuid.*"
 
 
 
