@@ -60,12 +60,15 @@ the screen reader follows input focus). Recent letters, held on the TV only,
 so a page left by mistake is two presses back.
 
 **Potential impact.** The audience is large and under-served on the one
-screen they already use. RNIB's 2026 Sight Loss Data Tool puts just over
-600,000 people living with AMD in England alone, rising to 774,000 in a
-decade, and over two million people in the UK living with sight loss. WHO's
+screen they already use. Nearly 20 million American adults have some form of
+age-related macular degeneration, 1.5 million of them late-stage (JAMA
+Ophthalmology 2022, on CDC surveillance data). RNIB's 2026 Sight Loss Data
+Tool puts just over 600,000 people living with AMD in England and over two
+million people in the UK living with sight loss. The US is the largest Fire TV
+market and where Vega OS launched first, so it is the first market. WHO's
 February 2026 fact sheet: at least 2.2 billion people worldwide have a near
-or distance vision impairment, most over 50. Paper post does not stop
-arriving: bills, hospital letters, council letters. A relative or carer with
+or distance vision impairment, most over 50. Paper mail does not stop
+arriving: bills, hospital letters, city letters. A relative or caregiver with
 a phone is the distribution channel, which is also why the phone page has
 one button. Cost per letter is about $0.02–0.03 read on screen, $0.05 with
 the voice, which makes a free tier or a charity-funded service realistic.
@@ -112,7 +115,7 @@ Fire TV hackathon projects, and where they stop:
 **Five lines of differentiation to put in the description and the video,
 in this order:**
 
-1. **It reads your post, on the TV.** Photograph a letter with any phone; it
+1. **It reads your letters, on the TV.** Photograph a letter with any phone; it
    appears in very large print on the screen you already own, two metres
    away, and one press reads it aloud.
 2. **Every number is guarded.** Figures come from Textract, never from the
@@ -141,6 +144,9 @@ accessibility work.
 
 **Tagline:** Photograph a letter with your phone. It appears on your Fire TV
 in very large print, with every number checked, and reads itself aloud.
+
+**About line:** Built in Pakistan for every living room with a Fire TV. First
+market: the United States, where Fire TV and Vega OS live.
 
 **Inspiration**
 
@@ -178,7 +184,7 @@ expense model, has Nova Pro look at the photo independently to confirm the
 money figures, rewrites the page into short spoken sentences and main points
 with Nova Pro, then runs two guards: a currency the page does not print is
 never spoken, and any sentence containing a number that is not on the page
-is dropped. Amazon Polly reads the whole letter as one story, made only when
+is dropped. Amazon Polly (Joanna, US English, neural) reads the whole letter as one story, made only when
 someone presses Listen. The phone page converts HEIC to JPEG and downscales
 in the browser. Audio on the TV uses Vega's W3C media AudioPlayer.
 
@@ -220,8 +226,11 @@ keeping from day one.
 **What's next**
 
 A physical Fire TV run with VoiceView, then distribution through the people
-who reach this audience: adult children, carers, and charities such as RNIB,
-the Macular Society and Age UK. A per-TV allow-list so only a paired phone
+who reach this audience: adult children, caregivers, and sight-loss charities in
+each market, such as the American Foundation for the Blind and Prevent Blindness
+in the US, and RNIB and the Macular Society in the UK. The US comes first,
+because that is where Fire TV and Vega OS are; the app already works in English
+for the UK, Germany, Japan and India. A per-TV allow-list so only a paired phone
 can send, CloudFront with rate limiting in front of the API, and a batch
 mode so a carer can photograph a whole pile of post at once.
 
@@ -244,14 +253,14 @@ visible: it proves the round trip is live.
 
 | Time | On screen | Voice-over |
 |---|---|---|
-| 0:00–0:15 | A real letter on a table, then the TV pairing screen (dark look). | "A few months ago I got solar retinopathy. I couldn't read my phone, and I couldn't read a letter. Millions of people live like that every day. So I built BigPrint TV: the television you already own becomes the reader for your post." |
+| 0:00–0:15 | A real letter on a table, then the TV pairing screen (dark look). | "A few months ago I got solar retinopathy. I couldn't read my phone, and I couldn't read a letter. Millions of people live like that every day. So I built BigPrint TV: the television you already own becomes the reader for your mail." |
 | 0:15–0:30 | Phone scans the QR; one-button page; photo taken. Split screen with the TV turning to "Reading your letter". | "A relative or carer scans the code on the TV with any phone. One button: photograph the letter. The phone is only a camera." |
 | 0:30–0:55 | The letter appears: kind and sender, the key figures pinned, the full letter in large print. D-pad moves line by line. | "About ten seconds later the letter is on the TV in large print. The amount due, the pay-by date and the account number are pinned at the top, and every one of them came from the OCR, never from a language model. A second reader checks the money against the photo." |
 | 0:55–1:15 | Settings: Show → Main points, then Exact words (table rows marked). Text size to 2×; figures stay pinned. | "Three ways to read it: plain English, just the main points, or the exact words as printed. Text goes up to twice the size and the figures never scroll away." |
 | 1:15–1:35 | Press Listen. Button becomes Pause. The voice reads; nothing on screen moves. Pause, carry on. | "Press Listen and the whole letter is read in a natural voice, made only when someone asks for it. Pause and carry on when you like." |
-| 1:35–1:55 | Colours: Dark → Light → Yellow on black. First-run tile screen if you reset. Focus ring on a line. | "Old eyes disagree about what's easiest to read, even with the same condition, so the viewer chooses by reading a real sentence. Every pair passes WCAG at seven to one." |
+| 1:35–1:55 | Colors: Dark → Light → Yellow on black. First-run tile screen if you reset. Focus ring on a line. | "Old eyes disagree about what's easiest to read, even with the same condition, so the viewer chooses by reading a real sentence. Every pair passes WCAG at seven to one." |
 | 1:55–2:15 | A blurry photo: the "Check: some words were hard to read" panel. Then a receipt with a table read as sentences. | "When the page is hard to read, it says so instead of guessing. And a bill's table is read as whole rows, not loose numbers." |
-| 2:15–2:30 | Next photo, second page waiting. Recent letters list. | "Next photo goes on to the next page. Recent letters stay on the TV for a day, then everything is deleted: these are people's private post." |
+| 2:15–2:30 | Next photo, second page waiting. Recent letters list. | "Next photo goes on to the next page. Recent letters stay on the TV for a day, then everything is deleted: these are people's private mail." |
 | 2:30–2:40 | Architecture card: phone → API Gateway → Lambda → S3 → Lambda (Textract, Nova, Polly) → TV. Repo URL. | "Two Lambda functions, S3, Textract, Nova and Polly. About three cents a letter. Open source, MIT." |
 
 Have two photos ready: a clean one-page bill with a table, and a deliberately
@@ -308,7 +317,7 @@ long versions with reproduction steps are the numbered entries in
   references, right often enough on money to be worth a veto. A new account
   was blocked for hours by account verification that presented as a quota
   error with every quota at zero.
-- **Amazon Polly (neural, Amy).** Clear and unhurried for this audience;
+- **Amazon Polly (neural, Joanna, US English).** Clear and unhurried for this audience;
   the 3,000-character limit is handled by splitting between sentences.
 - **AWS Lambda and API Gateway.** A public Function URL configured exactly
   as documented answered 403 to everyone and nothing in the account could

@@ -52,7 +52,7 @@ const LISTEN_LABEL: Record<ListenState, string> = {
   idle: 'Listen',
   preparing: 'Getting the voice…',
   playing: 'Pause',
-  paused: 'Carry on listening',
+  paused: 'Keep listening',
   unavailable: 'No voice',
 };
 
@@ -60,7 +60,7 @@ const LISTEN_SPOKEN: Record<ListenState, string> = {
   idle: 'Listen to the whole letter read aloud.',
   preparing: 'Getting the voice ready. Press to cancel.',
   playing: 'Pause the voice.',
-  paused: 'Carry on listening from where it stopped.',
+  paused: 'Keep listening from where it stopped.',
   unavailable: 'The voice is not available for this letter.',
 };
 
@@ -202,7 +202,7 @@ export const DocumentView = ({
         'Press up and down to move through the text. ' +
         'At the bottom: Listen reads the whole letter aloud, Next photo goes ' +
         'on to the next page, and Settings has what to show, text size and ' +
-        'colours.'
+        'colors.'
       }>
       <View style={layout.baselineRow}>
         <Text
@@ -354,7 +354,7 @@ export const DocumentView = ({
               testID="control-Bigger text"
             />
           </SettingsRow>
-          <SettingsRow label="Colours" colours={colours} dp={dp} type={type}>
+          <SettingsRow label="Colors" colours={colours} dp={dp} type={type}>
             {COLOURS_ORDER.map((name) => (
               <TvButton
                 key={name}
@@ -402,7 +402,7 @@ export const DocumentView = ({
           />
           <TvButton
             label="Settings"
-            accessibilityLabel="Settings: what to show, text size and colours."
+            accessibilityLabel="Settings: what to show, text size and colors."
             onPress={openSettings}
             hasTVPreferredFocus={settingsUsed}
             testID="control-Settings"

@@ -62,7 +62,7 @@ Judging criteria: Tech Implementation, Design, Potential Impact, Quality of Idea
 | Colours | Dark (default), Light, Yellow on black; chosen at first run, one Colours button on every screen, persisted (`src/theme/`) |
 | Accessibility | Audited against Amazon's A11Y Compass and fixed; new states have spoken equivalents |
 | Backend | Two Lambdas + S3 behind an API Gateway HTTP API, deployed; see `backend/README.md` |
-| Pipeline | Textract LAYOUT+TABLES (headings kept) → Nova Lite classify → AnalyzeExpense + Nova Pro image cross-check → Nova Pro rewrite with the letter fenced as data → currency guard → whole-figure numeric guard. Polly neural, the whole letter as one story, only when someone presses Listen |
+| Pipeline | Textract LAYOUT+TABLES (headings kept) → Nova Lite classify → AnalyzeExpense + Nova Pro image cross-check → Nova Pro rewrite with the letter fenced as data → currency guard → whole-figure numeric guard. Polly neural (Joanna, US English), the whole letter as one story, only when someone presses Listen |
 | Tests | App: 156 Jest tests (including WCAG contrast for every colour pair), typecheck clean, 0 lint errors. Backend: 37 unit tests |
 | Round trip | `backend/tools/round_trip.sh` pairs, uploads a synthetic bill, polls, asks for the voice and fetches the audio from any machine. 19 Oct: text in 8–12 s with 5 of 5 key facts right, voice in 3–4 s |
 | Abuse limits | 128-bit session secret, JPEG-only 4 MB uploads, 20 per session, 40 sessions and 80 uploads per address per day, a 200 docs/day cap spent only after a real read, 1-day data expiry |
@@ -160,7 +160,7 @@ backend/
   capture_page.html            the phone page
   lambda_process.py            S3-triggered: a photo → text; a voice request → audio
   pipeline.py                  photo → OCR → classify → facts → plain English → guard
-  speech.py                    Polly: the whole letter as one story, in parts if long
+  speech.py                    Polly (Joanna, US English): the whole letter as one story, in parts if long
   tests/                       unit tests (python -m unittest discover backend/tests)
   run_batch.py                 accuracy report over the bucket
   gen_fixtures.py              regenerates src/data/documents.ts

@@ -259,7 +259,7 @@ describe('DocumentView listening', () => {
     service.voice({state: 'ready', urls: ['https://x/0']});
     fireEvent.press(screen.getByTestId('control-Listen'));
     expect(player.pause).toHaveBeenCalledTimes(1);
-    expect(screen.getByText('Carry on listening')).toBeTruthy();
+    expect(screen.getByText('Keep listening')).toBeTruthy();
     expect(screen.getByTestId('line-position').props.children).toBe('Paused');
     fireEvent.press(screen.getByTestId('control-Listen'));
     expect(player.resume).toHaveBeenCalledTimes(1);

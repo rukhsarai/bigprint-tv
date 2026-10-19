@@ -173,7 +173,7 @@ describe('App', () => {
     fireEvent.press(screen.getByTestId('colours-light'));
     await settled();
     expect(screen.getByText('Read anything on your TV')).toBeTruthy();
-    expect(screen.getByText('Colours: Light')).toBeTruthy();
+    expect(screen.getByText('Colors: Light')).toBeTruthy();
     await waitFor(async () =>
       expect(await AsyncStorage.getItem('bigprint.colours')).toBe('light'),
     );
@@ -184,21 +184,21 @@ describe('App', () => {
     render(<App service={neverDelivers} />);
     await settled();
     expect(screen.queryByText('Which is easier to read?')).toBeNull();
-    expect(screen.getByText('Colours: Yellow')).toBeTruthy();
+    expect(screen.getByText('Colors: Yellow')).toBeTruthy();
   });
 
   it('the Colours button moves to the next look and remembers it', async () => {
     render(<App service={neverDelivers} />);
     await settled();
-    expect(screen.getByText('Colours: Dark')).toBeTruthy();
+    expect(screen.getByText('Colors: Dark')).toBeTruthy();
     fireEvent.press(screen.getByTestId('colours-button'));
-    expect(screen.getByText('Colours: Light')).toBeTruthy();
+    expect(screen.getByText('Colors: Light')).toBeTruthy();
     await waitFor(async () =>
       expect(await AsyncStorage.getItem('bigprint.colours')).toBe('light'),
     );
     fireEvent.press(screen.getByTestId('colours-button'));
     fireEvent.press(screen.getByTestId('colours-button'));
-    expect(screen.getByText('Colours: Dark')).toBeTruthy();
+    expect(screen.getByText('Colors: Dark')).toBeTruthy();
   });
 
   it('ignores a saved value it does not recognise and asks again', async () => {

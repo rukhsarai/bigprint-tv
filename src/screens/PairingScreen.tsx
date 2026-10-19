@@ -133,7 +133,7 @@ export const PairingScreen = ({
         'Pairing screen. Ask someone to point a phone camera at the square ' +
         'on the right of the screen, then take a photo of a letter. ' +
         'It will appear here in large print and can be read aloud. ' +
-        'Text size and colour controls are at the bottom left.'
+        'Text size and color controls are at the bottom left.'
       }>
       <Text role="heading" style={[layout.bold, {color: colours.text}, t(44)]}>
         Read anything on your TV
@@ -291,8 +291,8 @@ export const PairingScreen = ({
           fontPx={30}
         />
         <TvButton
-          label={`Colours: ${colours.shortLabel}`}
-          accessibilityLabel={`Colours, ${colours.label}. Press to change.`}
+          label={`Colors: ${colours.shortLabel}`}
+          accessibilityLabel={`Colors, ${colours.label}. Press to change.`}
           onPress={cycle}
           testID="colours-button"
           fontPx={30}
