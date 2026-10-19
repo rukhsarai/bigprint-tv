@@ -22,17 +22,17 @@ import {useListen, type ListenState} from '../hooks/useListen';
 import {
   VIEW_LABEL,
   VIEW_ORDER,
-  nextView,
   useDocumentViewChoice,
   type DocumentViewName,
 } from '../hooks/useDocumentViewChoice';
 import type {ExactLine, ScannedDocument} from '../data/documents';
+import {toParagraphs} from '../data/paragraphs';
 import type {AudioPlayer} from '../services/audioPlayer';
 import type {DocumentService} from '../services/documentService';
 import {useColours} from '../theme/ColoursProvider';
 import {useDesignUnits, type TextType} from '../theme/layout';
 import {layout} from '../theme/styles';
-import type {Colours} from '../theme/colours';
+import {COLOURS, COLOURS_ORDER, type Colours} from '../theme/colours';
 import {TvButton} from '../components/TvButton';
 import {CameraIcon, SpeakerIcon, WarningIcon} from '../components/Icons';
 
@@ -82,7 +82,7 @@ export const DocumentView = ({
 }: Props) => {
   const {scale, scaled, changeScale, canGoBigger, canGoSmaller} =
     useTextScale();
-  const {colours, cycle} = useColours();
+  const {colours, name: coloursName, choose} = useColours();
   const {dp, type, unit} = useDesignUnits();
   const {view: savedView, setView} = useDocumentViewChoice();
   const t = (px: number) => type(scaled(px));
@@ -106,19 +106,31 @@ export const DocumentView = ({
 
   const shown: ExactLine[] = useMemo(() => {
     if (view === 'exact') {
-      return document.exact ?? [];
+      return toParagraphs(document.exact ?? []);
     }
     const source = view === 'points' ? document.summary ?? [] : document.lines;
     return source.map((text) => ({text, kind: 'text'}));
   }, [document, view]);
 
   const scroller = useRef<React.ElementRef<typeof ScrollView>>(null);
+  // View, text size and colours live behind one Settings button, so the
+  // screen shows the letter and the two things people do with it.
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  // After Settings close, focus goes back to the Settings button, not to
+  // wherever the platform guesses.
+  const [settingsUsed, setSettingsUsed] = useState(false);
+  const openSettings = () => {
+    setSettingsUsed(true);
+    setSettingsOpen(true);
+  };
 
   // The voice is the whole letter whichever view is on screen, so changing
   // the view leaves it playing.
-  const changeView = () => {
-    scroller.current?.scrollTo({y: 0, animated: false});
-    setView(nextView(view, offered));
+  const showView = (next: DocumentViewName) => {
+    if (next !== view) {
+      scroller.current?.scrollTo({y: 0, animated: false});
+      setView(next);
+    }
   };
 
   const {stop} = listen;
@@ -129,14 +141,19 @@ export const DocumentView = ({
 
   // The remote's Back key must leave the document, not the app. Without a
   // listener Vega's default handler exits; returning true claims the press.
-  // It does what Next photo does.
+  // It closes Settings if they are open, and otherwise does what Next photo
+  // does.
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      handleNext();
+      if (settingsOpen) {
+        setSettingsOpen(false);
+      } else {
+        handleNext();
+      }
       return true;
     });
     return () => sub.remove();
-  }, [handleNext]);
+  }, [handleNext, settingsOpen]);
 
   // Screen reader focus follows input focus on Fire TV, so static text can
   // never be reached on its own. The key facts and any warning are linked to
@@ -182,11 +199,10 @@ export const DocumentView = ({
       ]}
       accessibilityOrientationText={
         'Document view. Any important figures are listed at the top. ' +
-        'Press up and down to move through the text one line at a time. ' +
-        'The view button switches between the full letter, the main points ' +
-        'and the exact words. Listen reads the whole letter aloud. ' +
-        'Next photo goes on to the next page. ' +
-        'Text size and colour controls are at the bottom.'
+        'Press up and down to move through the text. ' +
+        'At the bottom: Listen reads the whole letter aloud, Next photo goes ' +
+        'on to the next page, and Settings has what to show, text size and ' +
+        'colours.'
       }>
       <View style={layout.baselineRow}>
         <Text
@@ -297,59 +313,102 @@ export const DocumentView = ({
         </TVFocusGuideView>
       </ScrollView>
 
-      <TVFocusGuideView style={[layout.rowWrap, {marginTop: dp(12)}]}>
-        {offered.length > 1 && (
+      {settingsOpen ? (
+        <TVFocusGuideView
+          style={{
+            marginTop: dp(12),
+            paddingTop: dp(16),
+            borderTopWidth: dp(4),
+            borderColor: colours.cardEdge,
+          }}>
+          {offered.length > 1 && (
+            <SettingsRow label="Show" colours={colours} dp={dp} type={type}>
+              {offered.map((name) => (
+                <TvButton
+                  key={name}
+                  label={VIEW_LABEL[name]}
+                  selected={name === view}
+                  onPress={() => showView(name)}
+                  testID={`control-View-${name}`}
+                />
+              ))}
+            </SettingsRow>
+          )}
+          <SettingsRow
+            label={`Text size ${scale}x`}
+            colours={colours}
+            dp={dp}
+            type={type}>
+            <TvButton
+              label="Smaller"
+              accessibilityLabel={`Smaller text. Now ${scale} times.`}
+              onPress={() => changeScale(-1)}
+              disabled={!canGoSmaller}
+              testID="control-Smaller text"
+            />
+            <TvButton
+              label="Bigger"
+              accessibilityLabel={`Bigger text. Now ${scale} times.`}
+              onPress={() => changeScale(1)}
+              disabled={!canGoBigger}
+              testID="control-Bigger text"
+            />
+          </SettingsRow>
+          <SettingsRow label="Colours" colours={colours} dp={dp} type={type}>
+            {COLOURS_ORDER.map((name) => (
+              <TvButton
+                key={name}
+                label={COLOURS[name].label}
+                selected={name === coloursName}
+                onPress={() => choose(name)}
+                testID={`control-Colours-${name}`}
+              />
+            ))}
+          </SettingsRow>
+          <View style={layout.row}>
+            <TvButton
+              label="Done"
+              accessibilityLabel="Done. Close settings and go back to the letter."
+              onPress={() => setSettingsOpen(false)}
+              hasTVPreferredFocus={true}
+              testID="control-Done"
+            />
+          </View>
+        </TVFocusGuideView>
+      ) : (
+        // Three buttons: the two things people do with a letter, and one
+        // way into everything else.
+        <TVFocusGuideView style={[layout.row, {marginTop: dp(12)}]}>
+          {canListen && (
+            <TvButton
+              label={LISTEN_LABEL[listen.state]}
+              accessibilityLabel={LISTEN_SPOKEN[listen.state]}
+              onPress={listen.press}
+              disabled={listen.state === 'unavailable'}
+              icon={(color, size) => <SpeakerIcon size={size} color={color} />}
+              testID="control-Listen"
+            />
+          )}
           <TvButton
-            label={`View: ${VIEW_LABEL[view]}`}
-            accessibilityLabel={`View, ${VIEW_LABEL[view]}. Press to change.`}
-            onPress={changeView}
-            testID="control-View"
+            label={nextReady ? 'Next photo is ready' : 'Next photo'}
+            accessibilityLabel={
+              nextReady
+                ? 'Next photo. It has been read and is ready to show.'
+                : 'Next photo. Send another page from your phone.'
+            }
+            onPress={handleNext}
+            icon={(color, size) => <CameraIcon size={size} color={color} />}
+            testID="control-Next photo"
           />
-        )}
-        {canListen && (
           <TvButton
-            label={LISTEN_LABEL[listen.state]}
-            accessibilityLabel={LISTEN_SPOKEN[listen.state]}
-            onPress={listen.press}
-            disabled={listen.state === 'unavailable'}
-            icon={(color, size) => <SpeakerIcon size={size} color={color} />}
-            testID="control-Listen"
+            label="Settings"
+            accessibilityLabel="Settings: what to show, text size and colours."
+            onPress={openSettings}
+            hasTVPreferredFocus={settingsUsed}
+            testID="control-Settings"
           />
-        )}
-        <TvButton
-          label={nextReady ? 'Next photo is ready' : 'Next photo'}
-          accessibilityLabel={
-            nextReady
-              ? 'Next photo. It has been read and is ready to show.'
-              : 'Next photo. Send another page from your phone.'
-          }
-          onPress={handleNext}
-          icon={(color, size) => <CameraIcon size={size} color={color} />}
-          testID="control-Next photo"
-        />
-        <TvButton
-          label="Bigger text"
-          onPress={() => changeScale(1)}
-          disabled={!canGoBigger}
-          testID="control-Bigger text"
-        />
-        <TvButton
-          label="Smaller text"
-          onPress={() => changeScale(-1)}
-          disabled={!canGoSmaller}
-          testID="control-Smaller text"
-        />
-        <TvButton
-          label={`Colours: ${colours.shortLabel}`}
-          accessibilityLabel={`Colours, ${colours.label}. Press to change.`}
-          onPress={cycle}
-          testID="control-Colours"
-        />
-        <Text
-          style={[{color: colours.textSecondary, marginLeft: dp(8)}, type(24)]}>
-          Text size {scale}x
-        </Text>
-      </TVFocusGuideView>
+        </TVFocusGuideView>
+      )}
     </View>
   );
 };
@@ -368,10 +427,11 @@ type DocumentLineProps = {
 };
 
 /**
- * One line of the letter, for reading. Focus is a thick ring round the line;
+ * One line or paragraph of the letter, for reading. Focus is a ring round it;
  * the letters keep the colours the viewer chose, because flipping a line to
  * dark-on-light where the reader is looking undoes the reason they chose a
- * dark screen. The ring's space is always reserved, so nothing moves.
+ * dark screen. The ring's space is always reserved, so nothing moves, and
+ * it is kept thin, because it is also the space between paragraphs.
  *
  * Memoised, so moving focus re-renders two lines, not the whole letter: at a
  * large size that is what keeps a TV from stuttering.
@@ -406,12 +466,12 @@ const DocumentLine = memo(
         style={[
           layout.plainRow,
           {
-            borderWidth: dp(14),
+            borderWidth: dp(8),
             borderColor: focused ? colours.focus : colours.background,
-            borderRadius: dp(16),
+            borderRadius: dp(14),
             paddingHorizontal: dp(28),
-            paddingTop: dp(kind === 'heading' ? 14 : 4),
-            paddingBottom: dp(6),
+            paddingTop: dp(kind === 'heading' ? 10 : 2),
+            paddingBottom: dp(2),
             backgroundColor: colours.background,
           },
         ]}>
@@ -429,4 +489,31 @@ const DocumentLine = memo(
       </Pressable>
     );
   },
+);
+
+/** One labelled row of Settings: the label on the left, its choices after. */
+const SettingsRow = ({
+  label,
+  colours,
+  dp,
+  type,
+  children,
+}: {
+  label: string;
+  colours: Colours;
+  dp: (px: number) => number;
+  type: (px: number) => TextType;
+  children: React.ReactNode;
+}) => (
+  <View style={[layout.row, {marginBottom: dp(14)}]}>
+    <Text
+      style={[
+        layout.bold,
+        {color: colours.textSecondary, width: dp(260)},
+        type(26),
+      ]}>
+      {label}
+    </Text>
+    {children}
+  </View>
 );

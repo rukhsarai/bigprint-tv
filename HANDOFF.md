@@ -52,6 +52,15 @@ word-by-word highlight read as blinking, and the voice must be cheap.
   capture role writes `voice/*` and `results/*/voice.json`.
 - **Next photo** replaces Back. It shows the code again, or the page already
   waiting ("Next photo is ready"); the remote's Back key does the same.
+- **Three buttons after the first TV test:** Listen, Next photo, Settings.
+  Settings opens a panel in place of the bar: Show (Full letter / Main
+  points / Exact words, the one in use ticked), Text size (Smaller / Bigger),
+  Colours (the three looks), Done. Back closes it before it leaves the letter.
+- **Exact words in sentences.** OCR gives one item per printed line, so a
+  wrapped sentence was split ("…for general / use.") with a gap between.
+  `src/data/paragraphs.ts` joins plain lines into sentences and short
+  paragraphs (headings and table rows kept apart); the focus ring is thinner
+  (8 px), since its reserved space is also the gap between items.
 
 Check on the device: Listen on a short and a long letter (two parts play
 back to back), Pause and Carry on listening, the "Getting the voice…" wait

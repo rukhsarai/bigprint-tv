@@ -6,6 +6,7 @@ import {Pressable, Text, View} from '@amazon-devices/react-native-kepler';
 import {useColours} from '../theme/ColoursProvider';
 import {useDesignUnits} from '../theme/layout';
 import {layout} from '../theme/styles';
+import {CheckIcon} from './Icons';
 
 type Props = {
   label: string;
@@ -21,6 +22,8 @@ type Props = {
   icon?: (color: string, size: number) => React.ReactNode;
   /** Label size in design pixels. Buttons keep their size at every text size. */
   fontPx?: number;
+  /** One of a set of choices, and the one in use: a tick says so. */
+  selected?: boolean;
 };
 
 /**
@@ -43,6 +46,7 @@ export const TvButton = ({
   testID,
   icon,
   fontPx = 28,
+  selected,
 }: Props) => {
   const [focused, setFocused] = useState(false);
   const {colours} = useColours();
@@ -71,7 +75,7 @@ export const TvButton = ({
       // Not `disabled`: a disabled Pressable cannot take focus, so the D-pad
       // would skip it and a screen reader could never announce it.
       onPress={disabled ? undefined : onPress}
-      accessibilityState={{disabled: !!disabled}}
+      accessibilityState={{disabled: !!disabled, selected}}
       hasTVPreferredFocus={hasTVPreferredFocus}
       onFocus={() => setFocused(true)}
       onBlur={() => setFocused(false)}
@@ -92,7 +96,11 @@ export const TvButton = ({
           backgroundColor: fill,
         },
       ]}>
-      {icon ? (
+      {selected ? (
+        <View style={{marginRight: dp(14)}}>
+          <CheckIcon size={iconSize} color={ink} />
+        </View>
+      ) : icon ? (
         <View style={{marginRight: dp(14)}}>{icon(ink, iconSize)}</View>
       ) : null}
       <Text style={[layout.bold, {color: ink}, type(fontPx)]}>{label}</Text>
