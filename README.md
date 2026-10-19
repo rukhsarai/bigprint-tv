@@ -8,7 +8,8 @@ press reads the whole letter aloud in a natural voice.
 
 Built for people with age-related sight loss, who already own a large screen
 and know how to use a remote. The phone is only a camera, and it is usually
-held by a relative or carer.
+held by a relative or caregiver. Built in Pakistan for every living room
+with a Fire TV; the first market is the United States.
 
 ## Why
 
@@ -17,7 +18,7 @@ messages on my phone, and I could not read the text on a page either. Things
 I had always done without thinking, a text from a friend, a letter on the
 table, were out of reach, and I was worried. Then I thought: this is not only
 my problem. Millions of people live with it every day, most of them older,
-and their post keeps arriving. I decided to solve it, for me and for them.
+and their mail keeps arriving. I decided to solve it, for me and for them.
 
 The answer was already in the room: a large screen that most people own and
 know how to drive with a remote, and a phone in a relative's hand to act as

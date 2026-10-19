@@ -18,7 +18,7 @@ from concurrent.futures import ThreadPoolExecutor
 import boto3
 from botocore.config import Config
 
-VOICE = "Amy"          # British English, clear and unhurried
+VOICE = "Joanna"       # US English, clear and unhurried
 ENGINE = "neural"
 MAX_CHARS = 2900       # Polly's per-request ceiling is 3,000 billed characters
 # A story is one or two parts; this only bounds a very long page.

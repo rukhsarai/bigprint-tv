@@ -20,7 +20,7 @@ TV ◀──GET /audio─────── capture Lambda                      
 | `capture_page.html` | The phone page. Downscales and re-encodes the photo as JPEG in the browser (this is also what makes iPhone HEIC work). |
 | `lambda_process.py` | Triggered by S3. For a photo: runs the pipeline and writes the text. For a voice request: reads the letter aloud, once. No public endpoint. |
 | `pipeline.py` | photo → OCR with layout and tables → classify → key facts (cross-checked) → plain English → currency guard → numeric guard |
-| `speech.py` | Polly neural voice: the whole letter as one story, split into parts only past Polly's 3,000-character limit. No word timings. |
+| `speech.py` | Polly neural voice (Joanna, US English): the whole letter as one story, split into parts only past Polly's 3,000-character limit. No word timings. |
 | `tests/` | Unit tests for the pure parts: `python -m unittest discover backend/tests` |
 | `run_batch.py` | Runs the pipeline over every photo in the bucket and prints an accuracy report |
 | `gen_fixtures.py` | Regenerates `src/data/documents.ts` from the saved results in `fixtures/` |

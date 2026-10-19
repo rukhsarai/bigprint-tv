@@ -38,14 +38,14 @@ export const FirstRunColours = () => {
       accessibilityOrientationText={
         'Choose how BigPrint looks. Press left and right to compare dark, ' +
         'light, and yellow on black, then press select on the one that is ' +
-        'easiest to read. You can change it later with the Colours button.'
+        'easiest to read. You can change it later with the Colors button.'
       }>
       <Text role="heading" style={[layout.bold, {color: page.text}, type(52)]}>
         Which is easier to read?
       </Text>
       <Text style={[{color: page.text, marginTop: dp(8)}, type(30)]}>
         Choose with Left and Right, then press Select. You can change it any
-        time with the Colours button.
+        time with the Colors button.
       </Text>
 
       <TVFocusGuideView
@@ -145,7 +145,7 @@ const Tile = ({
           <Text style={[{color: option.text}, type(44)]}>
             Your electricity bill is{' '}
             <Text style={[layout.bold, {color: option.keyFigure}]}>42.50</Text>,
-            due on 3 November.
+            due November 3.
           </Text>
           <Text style={[layout.bold, {color: option.text}, type(34)]}>
             {option.label}
