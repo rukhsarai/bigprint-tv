@@ -1,9 +1,11 @@
-import React, {useMemo} from 'react';
+import React, {useEffect, useMemo, useState} from 'react';
 import {View} from '@amazon-devices/react-native-kepler';
 
 import {PairingScreen} from './screens/PairingScreen';
 import {DocumentView} from './screens/DocumentView';
 import {FirstRunColours} from './screens/FirstRunColours';
+import {RecentLetters} from './screens/RecentLetters';
+import {useRecentLetters} from './hooks/useRecentLetters';
 import {useIncomingDocument} from './hooks/useIncomingDocument';
 import {
   createMockDocumentService,
@@ -48,8 +50,20 @@ const Screens = ({service, player}: Props) => {
 
   // Starts pairing straight away, even during the first-run choice, so the
   // code is ready by the time the viewer has picked a look.
-  const {status, session, document, error, nextReady, reset} =
+  const {status, session, document, error, nextReady, reset, show} =
     useIncomingDocument(documentService);
+  const recent = useRecentLetters();
+  const [browsing, setBrowsing] = useState(false);
+  const {remember} = recent;
+
+  // Every letter shown is kept on the TV, so one left by mistake comes back
+  // without another photo, another bill and another wait.
+  useEffect(() => {
+    if (document) {
+      remember(document);
+      setBrowsing(false);
+    }
+  }, [document, remember]);
 
   if (!restored) {
     // A blank screen in the default look for the moment it takes to read
@@ -77,5 +91,24 @@ const Screens = ({service, player}: Props) => {
     );
   }
 
-  return <PairingScreen status={status} session={session} error={error} />;
+  if (browsing) {
+    return (
+      <RecentLetters
+        letters={recent.letters}
+        onOpen={show}
+        onClose={() => setBrowsing(false)}
+        onDeleteAll={recent.clear}
+      />
+    );
+  }
+
+  return (
+    <PairingScreen
+      status={status}
+      session={session}
+      error={error}
+      recentCount={recent.letters.length}
+      onRecent={() => setBrowsing(true)}
+    />
+  );
 };

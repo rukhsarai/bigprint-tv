@@ -1,5 +1,5 @@
 import 'react-native';
-import {fireEvent, render, screen, waitFor} from '@testing-library/react-native';
+import {act, fireEvent, render, screen, waitFor} from '@testing-library/react-native';
 import * as React from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -96,6 +96,44 @@ describe('App', () => {
     );
     // The pairing screen is gone once the document is on screen.
     expect(screen.queryByTestId('pairing-waiting')).toBeNull();
+  });
+
+  it('brings a letter back from Recent letters after Next photo by mistake', async () => {
+    const service = createMockDocumentService(sampleLetter, 10);
+    service.requestVoice = jest.fn(service.requestVoice);
+    render(<App service={service} player={null} />);
+    await waitFor(() => expect(screen.getByText(sampleLetter.kind)).toBeTruthy());
+    fireEvent.press(screen.getByTestId('control-Next photo'));
+    await waitFor(() => expect(screen.getByTestId('control-Recent letters')).toBeTruthy());
+    fireEvent.press(screen.getByTestId('control-Recent letters'));
+    fireEvent.press(screen.getByTestId('recent-0'));
+    await waitFor(() => expect(screen.getByText(sampleLetter.kind)).toBeTruthy());
+    // Nothing was sent again to get it back.
+    expect(service.requestVoice).not.toHaveBeenCalled();
+  });
+
+  it('shows only "Reading your letter" while a photo is read', async () => {
+    let l: DocumentListener | null = null;
+    render(
+      <App
+        service={{
+          subscribe: (listener) => {
+            l = listener;
+            listener.onSession({code: '482134', captureUrl: 'u', expiresAt: 1});
+            return () => {};
+          },
+          canListen: () => false,
+          requestVoice: () => () => {},
+        }}
+      />,
+    );
+    await waitFor(() => expect(screen.getByText('482 134')).toBeTruthy());
+    act(() => l!.onProcessing());
+    await waitFor(() => expect(screen.getByTestId('pairing-processing')).toBeTruthy());
+    expect(screen.getByText('Reading your letter')).toBeTruthy();
+    // The code has done its job: no QR, no buttons, one message.
+    expect(screen.queryByText('482 134')).toBeNull();
+    expect(screen.queryByTestId('size-button-Bigger text')).toBeNull();
   });
 
   it('tells the user when reading the photo failed', async () => {

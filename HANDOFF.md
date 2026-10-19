@@ -56,6 +56,15 @@ word-by-word highlight read as blinking, and the voice must be cheap.
   Settings opens a panel in place of the bar: Show (Full letter / Main
   points / Exact words, the one in use ticked), Text size (Smaller / Bigger),
   Colours (the three looks), Done. Back closes it before it leaves the letter.
+- **Recent letters, on the TV only.** Every letter shown is kept in
+  AsyncStorage (`bigprint.recent`, at most 10, at most 7 days, Delete all
+  with one confirmation). After Next photo by mistake, "Recent letters" is
+  the first button on the pairing screen and the newest letter is first in
+  the list, so it is two presses back with nothing sent to AWS. Not
+  encrypted beyond the app's own storage; anyone with the remote can open
+  the list, which is why it is short-lived and deletable.
+- **"Reading your letter" is the whole screen** while a photo is read: no
+  QR, no buttons, one message and the two progress steps.
 - **Exact words in sentences.** OCR gives one item per printed line, so a
   wrapped sentence was split ("…for general / use.") with a gap between.
   `src/data/paragraphs.ts` joins plain lines into sentences and short

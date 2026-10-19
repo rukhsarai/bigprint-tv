@@ -22,6 +22,8 @@ export type IncomingDocument = {
   nextReady: boolean;
   /** Go on to the next photo — shown at once if it is already here. */
   reset: () => void;
+  /** Show a letter again from the TV's own list, without sending anything. */
+  show: (document: ScannedDocument) => void;
 };
 
 type Held =
@@ -140,5 +142,20 @@ export const useIncomingDocument = (
     }
   }, []);
 
-  return {status, session, document, error, nextReady, reset};
+  const show = useCallback((again: ScannedDocument) => {
+    // Anything that arrives meanwhile is held, as for any letter on screen.
+    reading.current = true;
+    setError(null);
+    setDocument(again);
+    setStatus((current) => {
+      // A page still being read is not forgotten: Next photo shows its
+      // progress again (idempotent, so safe if React runs this twice).
+      if (current === 'processing' && !held.current) {
+        held.current = {kind: 'processing'};
+      }
+      return 'arrived';
+    });
+  }, []);
+
+  return {status, session, document, error, nextReady, reset, show};
 };

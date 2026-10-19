@@ -35,6 +35,9 @@ type Props = {
   session: PairingSession | null;
   /** Set when the last attempt failed, so the user is told rather than left waiting. */
   error?: string | null;
+  /** Letters already read on this TV, to open again without a new photo. */
+  recentCount?: number;
+  onRecent?: () => void;
 };
 
 /** "482134" -> "482 134": easier to read out and to compare with the phone. */
@@ -58,7 +61,13 @@ const STEPS = [
   {Icon: TvIcon, text: 'It appears here in large print, and can be read aloud'},
 ];
 
-export const PairingScreen = ({status, session, error}: Props) => {
+export const PairingScreen = ({
+  status,
+  session,
+  error,
+  recentCount = 0,
+  onRecent,
+}: Props) => {
   const {scale, scaled, restored, changeScale, canGoBigger, canGoSmaller} =
     useTextScale();
   const {colours, cycle} = useColours();
@@ -76,6 +85,38 @@ export const PairingScreen = ({status, session, error}: Props) => {
   const windowText = `${Math.round(window.width)}×${Math.round(
     window.height,
   )} @${window.scale}x`;
+
+  if (processing) {
+    // The photo is on its way: the code has done its job, so the screen
+    // says one thing only, in large print, until the letter is ready.
+    return (
+      <View
+        style={[
+          layout.fill,
+          {
+            backgroundColor: colours.background,
+            paddingHorizontal: dp(160),
+            paddingVertical: dp(120),
+          },
+        ]}
+        accessibilityOrientationText="Reading your letter. It will appear here in about half a minute.">
+        <Text
+          role="heading"
+          style={[layout.bold, {color: colours.text}, t(56)]}>
+          Reading your letter
+        </Text>
+        <View style={{marginTop: dp(56)}}>
+          <Progress colours={colours} dp={dp} t={t} />
+        </View>
+        <Text
+          aria-live="polite"
+          style={[{color: colours.textSecondary, marginTop: dp(24)}, t(30)]}
+          testID={`pairing-${status}`}>
+          {STATUS_TEXT[status]}
+        </Text>
+      </View>
+    );
+  }
 
   return (
     <View
@@ -95,7 +136,7 @@ export const PairingScreen = ({status, session, error}: Props) => {
         'Text size and colour controls are at the bottom left.'
       }>
       <Text role="heading" style={[layout.bold, {color: colours.text}, t(44)]}>
-        {processing ? 'Reading your letter' : 'Read anything on your TV'}
+        Read anything on your TV
       </Text>
 
       <View style={[layout.fillRow, {marginTop: dp(28)}]}>
@@ -109,8 +150,6 @@ export const PairingScreen = ({status, session, error}: Props) => {
             showsVerticalScrollIndicator={false}>
             {failed ? (
               <ProblemPanel message={error!} colours={colours} dp={dp} t={t} />
-            ) : processing ? (
-              <Progress colours={colours} dp={dp} t={t} />
             ) : (
               STEPS.map((step, index) => (
                 <Step
@@ -222,11 +261,23 @@ export const PairingScreen = ({status, session, error}: Props) => {
 
       {/* Controls stay put so they are never scrolled off screen. */}
       <TVFocusGuideView style={[layout.rowWrap, {marginTop: dp(28)}]}>
+        {recentCount > 0 && onRecent && (
+          <TvButton
+            label="Recent letters"
+            accessibilityLabel={`Recent letters: ${recentCount} on this TV. Read one again without a new photo.`}
+            onPress={onRecent}
+            // First, so a letter left by mistake is one press away.
+            hasTVPreferredFocus
+            describedBy={['pairing-code-label', 'pairing-code']}
+            testID="control-Recent letters"
+            fontPx={30}
+          />
+        )}
         <TvButton
           label="Bigger text"
           onPress={() => changeScale(1)}
           disabled={!canGoBigger}
-          hasTVPreferredFocus
+          hasTVPreferredFocus={recentCount === 0}
           // The pairing code can never take focus, so link it to the first control.
           describedBy={['pairing-code-label', 'pairing-code']}
           testID="size-button-Bigger text"
@@ -346,7 +397,7 @@ const Progress = ({colours, dp, t}: PartProps) => (
         <Numeral value={2} color={colours.text} dp={dp} />
       </Badge>
       <Text style={[layout.fill, layout.bold, {color: colours.text}, t(30)]}>
-        Reading the words and making the voice
+        Reading the words
         <Text style={[layout.regular, {color: colours.textSecondary}]}>
           {' '}
           — now
