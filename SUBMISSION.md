@@ -70,8 +70,10 @@ a phone is the distribution channel, which is also why the phone page has
 one button. Cost per letter is about $0.02–0.03 read on screen, $0.05 with
 the voice, which makes a free tier or a charity-funded service realistic.
 
-**Quality of the idea.** The TV is the right surface for this and nobody
-treats it that way: a large screen the person already owns, two metres away,
+**Quality of the idea.** It comes from a real need: the author lost the
+ability to read a phone or a page to solar retinopathy a few months ago,
+and built the thing that would have helped. The TV is the right surface for
+this and nobody treats it that way: a large screen the person already owns, two metres away,
 with a remote they are not afraid of. The phone is only a camera. The
 design decisions that are *not* obvious are the ones to point at: reading
 first and voice on request, numbers come from OCR and never from the model,
@@ -142,12 +144,16 @@ in very large print, with every number checked, and reads itself aloud.
 
 **Inspiration**
 
-Paper post does not stop when your eyes do. Bills, hospital letters, council
-letters and medicine labels still arrive, and for someone with macular
-degeneration the choice is a magnifier, a relative, or not knowing. The one
-large screen most older people already own, and already know how to drive,
-is the television. BigPrint TV makes the TV the reader and the phone only a
-camera, usually held by a relative or carer.
+A few months ago I got solar retinopathy. Suddenly I could not read the
+messages on my phone, and I could not read the text on a page either. Things
+I had always done without thinking, a text from a friend, a letter on the
+table, were out of reach, and I was worried. Then I thought: this is not only
+my problem. Millions of people live with it every day, most of them older,
+and their post keeps arriving. I decided to solve it, for me and for them.
+
+The answer was already in the room: a large screen that most people own and
+know how to drive with a remote, and a phone in a relative's hand to act as
+the camera. BigPrint TV is that idea, built.
 
 **What it does**
 
@@ -238,8 +244,8 @@ visible: it proves the round trip is live.
 
 | Time | On screen | Voice-over |
 |---|---|---|
-| 0:00–0:12 | A real letter on a table, then the TV pairing screen (dark look). | "Paper post doesn't stop when your eyes do. BigPrint TV turns the television you already own into a reader for your letters." |
-| 0:12–0:30 | Phone scans the QR; one-button page; photo taken. Split screen with the TV turning to "Reading your letter". | "A relative or carer scans the code on the TV with any phone. One button: photograph the letter. The phone is only a camera." |
+| 0:00–0:15 | A real letter on a table, then the TV pairing screen (dark look). | "A few months ago I got solar retinopathy. I couldn't read my phone, and I couldn't read a letter. Millions of people live like that every day. So I built BigPrint TV: the television you already own becomes the reader for your post." |
+| 0:15–0:30 | Phone scans the QR; one-button page; photo taken. Split screen with the TV turning to "Reading your letter". | "A relative or carer scans the code on the TV with any phone. One button: photograph the letter. The phone is only a camera." |
 | 0:30–0:55 | The letter appears: kind and sender, the key figures pinned, the full letter in large print. D-pad moves line by line. | "About ten seconds later the letter is on the TV in large print. The amount due, the pay-by date and the account number are pinned at the top, and every one of them came from the OCR, never from a language model. A second reader checks the money against the photo." |
 | 0:55–1:15 | Settings: Show → Main points, then Exact words (table rows marked). Text size to 2×; figures stay pinned. | "Three ways to read it: plain English, just the main points, or the exact words as printed. Text goes up to twice the size and the figures never scroll away." |
 | 1:15–1:35 | Press Listen. Button becomes Pause. The voice reads; nothing on screen moves. Pause, carry on. | "Press Listen and the whole letter is read in a natural voice, made only when someone asks for it. Pause and carry on when you like." |
@@ -326,8 +332,8 @@ them.
   stick is reachable before Thursday, one session with VoiceView on is the
   single most valuable hour left.
 - **Pairing-screen instructions can overflow** at some logical viewports and
-  the larger text sizes (`HANDOFF.md`, open bug). Check at 1×, 1.5× and 2× on
-  the virtual device before recording.
+  the larger text sizes (open bug, `CONTEXT.md` §3). Check at 1×, 1.5× and 2×
+  on the virtual device before recording.
 - **The rewrite sometimes adds "More items are listed."** when nothing was
   omitted (seen in one of two runs today). Optional one-line prompt fix in
   `backend/pipeline.py`, `rewrite_prompt`: change "If a table is long, give
@@ -350,12 +356,8 @@ them.
 
 ## 8. Pre-submission checklist, in order
 
-1. **Merge to `main`.** Judges clone the default branch, and `main` still
-   has only the 15 October commit. Open PRs: #1 (`claude/upbeat-rubin-ad0wgg`
-   → `main`), #2 (`claude/new-session-hiz167` → PR #1's branch), and the PR
-   for `claude/dreamy-volta-dof7f9`, which stacks on #2 and targets `main`
-   directly. Merging the last one alone brings everything to `main`; #1 and
-   #2 can then be closed.
+1. **`main` is the code.** Everything is merged; the old stacked branches and
+   PRs are closed. Work from `main` only.
 2. **Build with the icon.** On the development machine:
    `git checkout main && git pull && npm ci`, then
    `vega exec vpt validate manifest.toml`, `npm run build:release`, install

@@ -76,8 +76,15 @@ Judging criteria: Tech Implementation, Design, Potential Impact, Quality of Idea
   in about 8 s, two real photos read correctly). Read-aloud plays on the
   virtual device once the manifest declares the audio services under
   `[wants]`; an earlier note that the audio services "cannot be bound" there
-  was wrong. One open layout bug: the pairing-screen instructions overflow at
-  1x, see `HANDOFF.md`.
+  was wrong.
+- **Open layout bug: the pairing-screen instructions can overflow.** Seen
+  at 1x on the virtual device: step 2 cut at the ScrollView's edge with the
+  status line over it, step 3 out of view. The numbers only reproduce at a
+  logical window around 960×540 (a density-2 screen), where every step
+  wraps to two lines. The pairing screen's debug line shows the window size;
+  read it off the screen on the next run. If it is 960×540 the fix is a
+  one-line title and one-line steps at 1x; the steps must not scroll, since
+  nothing in them can take focus. Check at 1x, 1.5x and 2x before recording.
 - **Nothing has been run on a physical Fire TV**, and VoiceView has never been
   run against it. For an accessibility product that is a real gap — the markup
   is correct by construction, not confirmed by ear.
@@ -102,7 +109,6 @@ Judging criteria: Tech Implementation, Design, Potential Impact, Quality of Idea
 ### Not started
 
 - Demo video (script and shot list in `SUBMISSION.md` §5)
-- Merge to `main` (PRs #1, #2 and the one stacked on them; `SUBMISSION.md` §8)
 - Fire OS build (separate project, out of scope before the deadline)
 
 ---
@@ -331,7 +337,7 @@ comes from OCR that may be wrong. Show how to pay instead.
 
 The ordered pre-submission checklist is `SUBMISSION.md` §8. In short:
 
-0. Merge to `main`: judges clone the default branch.
+0. Work from `main`; it holds all the code and is what judges clone.
 1. Run on a physical Fire TV with VoiceView on. Listen to every state.
 2. Scan the QR with a real iPhone and a real Android phone.
 3. Record the demo video: phone → TV round trip, read-aloud, text size, under

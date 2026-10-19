@@ -10,6 +10,19 @@ Built for people with age-related sight loss, who already own a large screen
 and know how to use a remote. The phone is only a camera, and it is usually
 held by a relative or carer.
 
+## Why
+
+A few months ago I got solar retinopathy. Suddenly I could not read the
+messages on my phone, and I could not read the text on a page either. Things
+I had always done without thinking, a text from a friend, a letter on the
+table, were out of reach, and I was worried. Then I thought: this is not only
+my problem. Millions of people live with it every day, most of them older,
+and their post keeps arriving. I decided to solve it, for me and for them.
+
+The answer was already in the room: a large screen that most people own and
+know how to drive with a remote, and a phone in a relative's hand to act as
+the camera. BigPrint TV is that idea, built.
+
 ---
 
 ## 👉 Start with [CONTEXT.md](CONTEXT.md)
