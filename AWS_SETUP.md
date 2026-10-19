@@ -83,16 +83,16 @@ For each of the two roles:
 
 | Role name | Policy file | What it allows |
 |---|---|---|
-| `BigPrintTvCaptureRole` | `aws/capture-role-policy.json` | sessions, per-address limits, write photos and a status file, read results, own logs |
-| `BigPrintTvProcessRole` | `aws/process-role-policy.json` | read photos and its own status file, Textract, Nova, Polly, write results, a daily counter, own logs |
+| `BigPrintTvCaptureRole` | `aws/capture-role-policy.json` | sessions, per-address limits, write photos, voice requests and status files, read results, own logs |
+| `BigPrintTvProcessRole` | `aws/process-role-policy.json` | read photos, its status and documents, Textract, Nova, Polly, write results, a daily counter, own logs |
 
 The capture role deliberately cannot call Textract, Bedrock or Polly: it is the
 only thing on the public internet.
 
 **Check the paste.** Open the role → the policy → *JSON* and compare the `Sid`
 names with the file. The capture role must list `Sessions`,
-`PerAddressLimits`, `StorePhotosAndProcessingStatus`, `ReadResults`, `OwnLogs`;
-the process role `ReadPhotos`, `WriteResults`, `ReadOwnStatus`,
+`PerAddressLimits`, `StorePhotosVoiceRequestsAndStatus`, `ReadResults`, `OwnLogs`;
+the process role `ReadPhotos`, `WriteResults`, `ReadStatusAndDocuments`,
 `DailyCapCounter`, `ReadDocuments`, `NovaOnly`, `Speech`, `OwnLogs`. A missing
 name means an older copy of the file was pasted; paste the current one over it.
 Policies are versioned in this repository precisely so that this check is
