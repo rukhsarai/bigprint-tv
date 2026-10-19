@@ -19,7 +19,7 @@ type Props = {
   describedBy?: string[];
   testID: string;
   /** Drawn before the label, in the label's colour. */
-  icon?: (color: string, size: number) => React.ReactNode;
+  Icon?: React.ComponentType<{size: number; color: string}>;
   /** Label size in design pixels. Buttons keep their size at every text size. */
   fontPx?: number;
   /** One of a set of choices, and the one in use: a tick says so. */
@@ -44,7 +44,7 @@ export const TvButton = ({
   hasTVPreferredFocus,
   describedBy,
   testID,
-  icon,
+  Icon,
   fontPx = 28,
   selected,
 }: Props) => {
@@ -100,8 +100,10 @@ export const TvButton = ({
         <View style={{marginRight: dp(14)}}>
           <CheckIcon size={iconSize} color={ink} />
         </View>
-      ) : icon ? (
-        <View style={{marginRight: dp(14)}}>{icon(ink, iconSize)}</View>
+      ) : Icon ? (
+        <View style={{marginRight: dp(14)}}>
+          <Icon size={iconSize} color={ink} />
+        </View>
       ) : null}
       <Text style={[layout.bold, {color: ink}, type(fontPx)]}>{label}</Text>
     </Pressable>

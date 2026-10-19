@@ -2,7 +2,7 @@
 
 **Read this first.** It is the handover document: what the product is, what is
 built, what is still unverified, and the decisions that would be expensive to
-rediscover. Last updated 15 October 2026.
+rediscover. Last updated 19 October 2026.
 
 ---
 
@@ -63,7 +63,8 @@ Judging criteria: Tech Implementation, Design, Potential Impact, Quality of Idea
 | Accessibility | Audited against Amazon's A11Y Compass and fixed; new states have spoken equivalents |
 | Backend | Two Lambdas + S3 behind an API Gateway HTTP API, deployed; see `backend/README.md` |
 | Pipeline | Textract LAYOUT+TABLES (headings kept) → Nova Lite classify → AnalyzeExpense + Nova Pro image cross-check → Nova Pro rewrite with the letter fenced as data → currency guard → whole-figure numeric guard. Polly neural, the whole letter as one story, only when someone presses Listen |
-| Tests | App: 139 Jest tests (including WCAG contrast for every colour pair), typecheck clean, 0 lint errors. Backend: 37 unit tests |
+| Tests | App: 156 Jest tests (including WCAG contrast for every colour pair), typecheck clean, 0 lint errors. Backend: 37 unit tests |
+| Round trip | `backend/tools/round_trip.sh` pairs, uploads a synthetic bill, polls, asks for the voice and fetches the audio from any machine. 19 Oct: text in 8–12 s with 5 of 5 key facts right, voice in 3–4 s |
 | Abuse limits | 128-bit session secret, JPEG-only 4 MB uploads, 20 per session, 40 sessions and 80 uploads per address per day, a 200 docs/day cap spent only after a real read, 1-day data expiry |
 
 ### Unverified
@@ -88,9 +89,10 @@ Judging criteria: Tech Implementation, Design, Potential Impact, Quality of Idea
 - **The phone page on a real iPhone.** HEIC → JPEG conversion relies on Safari
   decoding HEIC into a canvas, which it does on iOS 11+, but it has only been
   reasoned about, not tapped.
-- **The app icon.** `assets/icon.png` (512×512) exists; wiring it into
-  `manifest.toml` needs the `[package]` icon key checked against the Vega docs
-  with `vega exec vpt validate manifest.toml`.
+- **The app icon.** `assets/image/icon.png` (512×512) is referenced from
+  `manifest.toml` as `icon = "@image/icon.png"`, the form the Vega manifest
+  reference gives. Not yet through `vega exec vpt validate manifest.toml` or
+  a build; if validation rejects the key, remove that one line.
 - **Lambda retry policy.** `aws/deploy.py` sets the processing function to zero
   async retries so a timed-out read is not re-run at full price; that call needs
   `lambda:PutFunctionEventInvokeConfig`, which is in the current
@@ -99,7 +101,8 @@ Judging criteria: Tech Implementation, Design, Potential Impact, Quality of Idea
 
 ### Not started
 
-- Demo video
+- Demo video (script and shot list in `SUBMISSION.md` §5)
+- Merge to `main` (PRs #1, #2 and the one stacked on them; `SUBMISSION.md` §8)
 - Fire OS build (separate project, out of scope before the deadline)
 
 ---
@@ -326,6 +329,9 @@ comes from OCR that may be wrong. Show how to pay instead.
 
 ## 8. Next steps
 
+The ordered pre-submission checklist is `SUBMISSION.md` §8. In short:
+
+0. Merge to `main`: judges clone the default branch.
 1. Run on a physical Fire TV with VoiceView on. Listen to every state.
 2. Scan the QR with a real iPhone and a real Android phone.
 3. Record the demo video: phone → TV round trip, read-aloud, text size, under

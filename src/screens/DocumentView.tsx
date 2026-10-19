@@ -385,7 +385,7 @@ export const DocumentView = ({
               accessibilityLabel={LISTEN_SPOKEN[listen.state]}
               onPress={listen.press}
               disabled={listen.state === 'unavailable'}
-              icon={(color, size) => <SpeakerIcon size={size} color={color} />}
+              Icon={SpeakerIcon}
               testID="control-Listen"
             />
           )}
@@ -397,7 +397,7 @@ export const DocumentView = ({
                 : 'Next photo. Send another page from your phone.'
             }
             onPress={handleNext}
-            icon={(color, size) => <CameraIcon size={size} color={color} />}
+            Icon={CameraIcon}
             testID="control-Next photo"
           />
           <TvButton

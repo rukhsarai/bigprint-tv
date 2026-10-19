@@ -27,6 +27,7 @@ before changing anything.
 | [AWS_SETUP.md](AWS_SETUP.md) | AWS account and IAM setup, step by step |
 | [DAILY_GUIDE.md](DAILY_GUIDE.md) | Commands to start work each day ([PDF](BigPrint_TV_Daily_Guide.pdf), app part only) |
 | [FRICTION_LOG.md](FRICTION_LOG.md) | Developer-experience issues found while building on Vega |
+| [SUBMISSION.md](SUBMISSION.md) | Hackathon submission pack: criteria, competitor scan, Devpost text, video script, checklist |
 
 ## How it works
 
@@ -63,16 +64,25 @@ vega run-app $(find build -name '*_x86_64.vpkg' -path '*Debug*' | head -1) com.b
 ```
 
 ```bash
-npm test                                   # app: 142 tests
-python -m unittest discover backend/tests  # backend: 14 tests
+npm test                                   # app: 156 tests
+python -m unittest discover backend/tests  # backend: 37 tests
 npm run lint
 npx tsc --noEmit
+backend/tools/round_trip.sh                # the live backend, end to end, in ~15 s
 ```
 
 With `CAPTURE_BASE_URL` empty in `src/config.ts` the app runs against a
 built-in mock and needs no AWS account. To use the real backend, deploy it
 (`aws/deploy.py`, see [backend/README.md](backend/README.md)) and paste the URL
 it prints into `src/config.ts`.
+
+## Status, 19 October 2026
+
+Everything runs against the live backend. Verified from outside AWS with
+`backend/tools/round_trip.sh`: a synthetic bill is on the TV in 8–12 seconds
+with every key figure right, and the voice is ready about 3 seconds after
+Listen is pressed. Not yet run on a physical Fire TV. Demo video: to be
+recorded (script in [SUBMISSION.md](SUBMISSION.md)).
 
 ## Stack
 

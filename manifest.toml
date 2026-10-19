@@ -4,6 +4,9 @@ schema-version = 1
 title = "BigPrint TV"
 version = "0.1.0"
 id = "com.bigprint.tv"
+# 512 x 512 PNG under assets/image, shown in Settings > Applications. The
+# @image/ prefix is how the manifest refers to that folder.
+icon = "@image/icon.png"
 
 [os.version]
 min = "1.2"
