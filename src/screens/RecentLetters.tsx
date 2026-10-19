@@ -77,7 +77,9 @@ export const RecentLetters = ({
       </Text>
       <Text
         style={[{color: colours.textSecondary, marginTop: dp(8)}, type(26)]}>
-        {`Kept on this TV for ${KEEP_DAYS} days. Opening one sends nothing again.`}
+        {`Kept on this TV for ${
+          KEEP_DAYS === 1 ? 'a day' : `${KEEP_DAYS} days`
+        }. Opening one sends nothing again.`}
       </Text>
 
       <ScrollView

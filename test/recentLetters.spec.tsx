@@ -43,13 +43,13 @@ describe('useRecentLetters', () => {
     expect(result.current.letters[0].document.id).toBe('doc-11');
   });
 
-  it('forgets letters older than a week, and anything malformed', async () => {
+  it('forgets letters older than a day, and anything malformed', async () => {
     const now = Date.now();
     await AsyncStorage.setItem(
       'bigprint.recent',
       JSON.stringify([
-        {document: sampleReceipt, seenAt: now - DAY},
-        {document: sampleInvoice, seenAt: now - 8 * DAY},
+        {document: sampleReceipt, seenAt: now - 2 * 60 * 60 * 1000},
+        {document: sampleInvoice, seenAt: now - 2 * DAY},
         {document: {id: 'x'}, seenAt: now},
         'nonsense',
       ]),
@@ -57,6 +57,17 @@ describe('useRecentLetters', () => {
     const {result} = renderHook(() => useRecentLetters());
     await waitFor(() => expect(result.current.letters).toHaveLength(1));
     expect(result.current.letters[0].document.id).toBe(sampleReceipt.id);
+  });
+
+  it('drops a letter once its day is up, even with the app left open', async () => {
+    let clock = Date.now();
+    const {result, rerender} = renderHook(() => useRecentLetters(() => clock));
+    await act(async () => {});
+    act(() => result.current.remember(sampleReceipt));
+    expect(result.current.letters).toHaveLength(1);
+    clock += DAY + 1000;
+    rerender({});
+    expect(result.current.letters).toHaveLength(0);
   });
 
   it('deletes them all from the TV', async () => {

@@ -57,7 +57,7 @@ word-by-word highlight read as blinking, and the voice must be cheap.
   points / Exact words, the one in use ticked), Text size (Smaller / Bigger),
   Colours (the three looks), Done. Back closes it before it leaves the letter.
 - **Recent letters, on the TV only.** Every letter shown is kept in
-  AsyncStorage (`bigprint.recent`, at most 10, at most 7 days, Delete all
+  AsyncStorage (`bigprint.recent`, at most 10, at most 1 day, Delete all
   with one confirmation). After Next photo by mistake, "Recent letters" is
   the first button on the pairing screen and the newest letter is first in
   the list, so it is two presses back with nothing sent to AWS. Not

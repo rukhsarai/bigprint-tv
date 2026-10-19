@@ -1,4 +1,4 @@
-import {useCallback, useEffect, useState} from 'react';
+import {useCallback, useEffect, useRef, useState} from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import type {ScannedDocument} from '../data/documents';
@@ -7,7 +7,7 @@ const RECENT_KEY = 'bigprint.recent';
 /** Enough to get back to a page or two; few enough to be a short list. */
 export const MAX_RECENT = 10;
 /** Letters are private post: they are not kept on the TV for long. */
-export const KEEP_DAYS = 7;
+export const KEEP_DAYS = 1;
 const KEEP_MS = KEEP_DAYS * 24 * 60 * 60 * 1000;
 
 export type RecentLetter = {
@@ -39,11 +39,15 @@ const fresh = (letters: RecentLetter[], now: number) =>
  * sends nothing anywhere.
  *
  * Kept on the device, never on the backend (which forgets everything after a
- * day), for at most a week and at most ten letters, and the list can be
+ * day), for at most a day and at most ten letters, and the list can be
  * deleted from the screen.
  */
 export const useRecentLetters = (now: () => number = Date.now) => {
   const [letters, setLetters] = useState<RecentLetter[]>([]);
+  // Held in a ref, so a clock passed inline does not reload storage on
+  // every render.
+  const clock = useRef(now);
+  clock.current = now;
 
   useEffect(() => {
     let active = true;
@@ -52,7 +56,7 @@ export const useRecentLetters = (now: () => number = Date.now) => {
         const saved = await AsyncStorage.getItem(RECENT_KEY);
         const parsed: unknown = saved ? JSON.parse(saved) : [];
         if (active && Array.isArray(parsed)) {
-          setLetters(fresh(parsed.filter(isLetter), now()));
+          setLetters(fresh(parsed.filter(isLetter), clock.current()));
         }
       } catch (e) {
         console.warn('Could not read recent letters', e);
@@ -61,7 +65,7 @@ export const useRecentLetters = (now: () => number = Date.now) => {
     return () => {
       active = false;
     };
-  }, [now]);
+  }, []);
 
   const save = (next: RecentLetter[]) => {
     AsyncStorage.setItem(RECENT_KEY, JSON.stringify(next)).catch((e) =>
@@ -69,22 +73,19 @@ export const useRecentLetters = (now: () => number = Date.now) => {
     );
   };
 
-  const remember = useCallback(
-    (document: ScannedDocument) => {
-      setLetters((current) => {
-        const next = fresh(
-          [
-            {document, seenAt: now()},
-            ...current.filter((l) => l.document.id !== document.id),
-          ],
-          now(),
-        );
-        save(next);
-        return next;
-      });
-    },
-    [now],
-  );
+  const remember = useCallback((document: ScannedDocument) => {
+    setLetters((current) => {
+      const next = fresh(
+        [
+          {document, seenAt: clock.current()},
+          ...current.filter((l) => l.document.id !== document.id),
+        ],
+        clock.current(),
+      );
+      save(next);
+      return next;
+    });
+  }, []);
 
   const clear = useCallback(() => {
     setLetters([]);
@@ -93,7 +94,9 @@ export const useRecentLetters = (now: () => number = Date.now) => {
     );
   }, []);
 
-  return {letters, remember, clear};
+  // Filtered again on every read: a TV left on for days must not keep
+  // showing a letter past its day.
+  return {letters: fresh(letters, now()), remember, clear};
 };
 
 /** "Bill from Severn Water", or just "Birthday card". */
