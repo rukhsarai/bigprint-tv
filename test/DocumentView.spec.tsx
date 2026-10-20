@@ -171,7 +171,7 @@ describe('DocumentView', () => {
     openSettings();
     fireEvent.press(screen.getByTestId('control-Bigger text'));
     await waitFor(async () =>
-      expect(await AsyncStorage.getItem('bigprint.textScale')).toBe('1.25'),
+      expect(await AsyncStorage.getItem('bigprint.textScale')).toBe('2'),
     );
   });
 
@@ -355,7 +355,7 @@ describe('DocumentView settings', () => {
     );
     await settled();
     openSettings();
-    expect(screen.getByText('Text size 1x')).toBeTruthy();
+    expect(screen.getByText('Text size 1.5x')).toBeTruthy();
     expect(screen.getByTestId('control-Colours-dark').props.accessibilityState.selected).toBe(true);
     fireEvent.press(screen.getByTestId('control-Colours-light'));
     expect(screen.getByTestId('control-Colours-light').props.accessibilityState.selected).toBe(true);

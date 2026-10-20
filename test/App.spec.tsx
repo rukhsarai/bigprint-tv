@@ -11,9 +11,11 @@ import {
 } from '../src/services/documentService';
 import {sampleLetter} from '../src/data/documents';
 
-/** Waits for the saved-text-size lookup to finish so React state is settled. */
+/** Waits for the saved-settings lookups to finish so React state is settled. */
 const settled = () =>
-  waitFor(() => expect(screen.getByText(/Text size/)).toBeTruthy());
+  waitFor(() =>
+    expect(screen.getByTestId('size-button-Bigger text')).toBeTruthy(),
+  );
 
 /** A service that issues a code but never delivers, so the app stays on the pairing screen. */
 const neverDelivers = {
@@ -151,10 +153,15 @@ describe('App', () => {
   });
 
   it('restores a previously saved text size', async () => {
-    await AsyncStorage.setItem('bigprint.textScale', '1.5');
+    await AsyncStorage.setItem('bigprint.textScale', '2');
     render(<App service={neverDelivers} />);
+    await settled();
+    // At 2x, the largest step, Bigger has nowhere to go.
     await waitFor(() =>
-      expect(screen.getByText(/^Text size 1\.5x \(saved\)/)).toBeTruthy(),
+      expect(
+        screen.getByTestId('size-button-Bigger text').props.accessibilityState
+          .disabled,
+      ).toBe(true),
     );
   });
 
@@ -209,10 +216,12 @@ describe('App', () => {
     );
   });
 
-  it('starts at the default size when nothing is saved', async () => {
+  it('starts at 1.5x when nothing is saved, so both size buttons work', async () => {
     render(<App service={neverDelivers} />);
-    await waitFor(() =>
-      expect(screen.getByText(/^Text size 1x \(saved\)/)).toBeTruthy(),
-    );
+    await settled();
+    const state = (id: string) =>
+      screen.getByTestId(id).props.accessibilityState.disabled;
+    expect(state('size-button-Smaller text')).toBe(false);
+    expect(state('size-button-Bigger text')).toBe(false);
   });
 });
