@@ -306,7 +306,9 @@ export const DocumentView = ({
               textType={line.kind === 'heading' ? headingType : lineType}
               unit={unit}
               colours={colours}
-              hasTVPreferredFocus={index === 0}
+              // Not while Settings are open: choosing a view re-creates the
+              // lines, and the first line would pull focus out of the panel.
+              hasTVPreferredFocus={index === 0 && !settingsOpen}
               describedBy={index === 0 ? describedByIds : undefined}
             />
           ))}

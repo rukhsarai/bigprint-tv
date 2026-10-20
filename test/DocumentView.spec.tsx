@@ -444,6 +444,20 @@ describe('DocumentView views', () => {
     expect(screen.queryByTestId('line-2')).toBeNull();
   });
 
+  it('keeps focus in Settings when a view is chosen', async () => {
+    show({document: letter});
+    await settled();
+    expect(screen.getByTestId('line-0').props.hasTVPreferredFocus).toBe(true);
+    openSettings();
+    // Choosing a view re-creates the lines; the first must not pull focus
+    // out of the panel while it is open.
+    fireEvent.press(screen.getByTestId('control-View-points'));
+    expect(screen.getByTestId('line-0').props.hasTVPreferredFocus).toBe(false);
+    expect(screen.getByTestId('control-Done')).toBeTruthy();
+    fireEvent.press(screen.getByTestId('control-Done'));
+    expect(screen.getByTestId('line-0').props.hasTVPreferredFocus).toBe(true);
+  });
+
   it('remembers the chosen view for the next letter', async () => {
     show({document: letter});
     await settled();
