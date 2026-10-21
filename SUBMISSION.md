@@ -31,7 +31,7 @@ Verified today, 19 October, from a machine outside AWS with no Fire TV, by
 | Audio served | 340 KB MP3 | 276 KB MP3 |
 
 App: 157 Jest tests, typecheck clean, 0 lint errors. Backend: 37 unit tests.
-Licence: MIT. Friction log: 10 entries.
+Licence: MIT. Friction log: 11 entries.
 
 ---
 
@@ -82,7 +82,7 @@ design decisions that are *not* obvious are the ones to point at: reading
 first and voice on request, numbers come from OCR and never from the model,
 a letter is data not instructions (scam post targets exactly this audience).
 
-**Bonuses.** Friction log: 10 entries in `FRICTION_LOG.md`, each with
+**Bonuses.** Friction log: 11 entries in `FRICTION_LOG.md`, each with
 task, steps, expected, actual, severity, workaround and a suggestion. Two
 are high severity and were real blockers (path with spaces; public Function
 URL 403). Mini challenges: **AWS Builder** (Lambda, API Gateway, S3,
@@ -199,7 +199,7 @@ in the browser.
 
 **Challenges we ran into**
 
-The honest list is long, and ten entries of it are written up in our
+The honest list is long, and eleven entries of it are written up in our
 friction log. The ones that shaped the product: our first OCR pass turned
 a receipt's table into "the amount for diesel is 8", right digits, wrong
 row, which is where the layout-aware OCR and the numeric guard were born.
@@ -296,9 +296,14 @@ long versions with reproduction steps are the numbered entries in
   work well once the path has no spaces; the build fails on a path with a
   space with an error that names a directory you never typed (#1). The build
   silently appends modules to `manifest.toml` (#9). `vega project doctor`
-  flags officially supported libraries as unknown (#4). Suggest: quote the
-  path, print one line when autolinking edits the manifest, include
-  system-deployed libraries in the managed list.
+  flags officially supported libraries as unknown (#4). The manifest
+  reference documents `icon` only as the Settings icon, but the home screen
+  renders the same 512 x 512 file in a 16:9 tile and crops it, so an icon
+  drawn to the documented spec arrives on the home screen with its top and
+  bottom cut off, and nothing warns (#11). Suggest: quote the path, print
+  one line when autolinking edits the manifest, include system-deployed
+  libraries in the managed list, document the icon's 16:9 safe area, and
+  either warn in `vpt validate` or accept a separate launcher asset.
 - **React Native for Vega 0.83 (`react-native-kepler` 4.0.1).** Solid and
   fast on the virtual device (cold launch under a second for a 2.5 MB
   release build). Accessibility props are Kepler-only imports but the docs

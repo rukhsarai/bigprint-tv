@@ -313,3 +313,56 @@ did not change. `aws/deploy.py` now does this by default.
 than the function's own policy, say so in the 403 body ("refused by an
 organisation policy"), and let `GetFunctionUrlConfig` report an effective
 public-access state. Hours went into re-checking a policy that was right.
+
+---
+
+## 11. The launcher crops the app icon to 16:9, and the manifest reference does not say so
+
+**Severity: Medium — a visibly broken icon on the home screen, found by eye
+three days before submission, not by any tool.**
+
+**Task:** Ship an app icon.
+
+**Steps:** Draw a 512 x 512 PNG, put it under `assets/image/`, declare
+`icon = "@image/icon.png"`, build, install, open "Your apps".
+
+**Expected:** The icon as drawn. The manifest reference
+([0.24 Manifest [package] Section][m]) gives one requirement and one use:
+"512x512, PNG ... used as the icon for the app within the Settings ->
+Applications -> Managed Installed Applications screen."
+
+**Actual:** Settings shows the square. The home screen does not: it renders
+the same asset in a 16:9 tile and centre-crops it, so only `y 112..400` of
+the 512 survives. The BigPrint mark's artwork spans `y 74..434`, so the top
+of the screen frame and the whole stand were cut off. Nothing warns about
+this: `vega exec vpt validate manifest.toml` reports 0 errors, the build
+reports nothing, and the asset is exactly the documented size.
+
+A second defect hid in the same region. The mark is an SVG with a rounded
+rect on transparency; flattening it to RGB painted the four corners white.
+In the launcher those corners are inside the cropped-away band, so the bug
+was invisible there, but Settings draws the whole square, white notches and
+all, on a dark list. The documentation's own advice for that screen is
+"light coloured solid icons", which is the opposite of what a transparent
+rounded corner becomes.
+
+**Workaround:** Treat the centre `512 x 288` as a safe area and draw the
+artwork inside it: scaled to 0.75 about the centre, the mark sits at
+`y 121..391` with about 9 px to spare at each end. Make the ground full
+bleed so there are no transparent corners to flatten. `tools/make_icon.py`
+draws it and asserts the safe area, so the next redraw cannot regress.
+
+The cost is real and worth stating: one asset serves a square and a 16:9
+tile, so making it safe for both means it is smaller than it could be in
+Settings. A separate launcher asset would avoid the compromise.
+
+**Suggestion:** Three things, cheapest first. (1) Say in the manifest
+reference that `icon` is used on the home screen as well as in Settings, and
+give the safe area; one sentence and a diagram would have prevented this
+entirely. (2) Have `vpt validate` warn when the icon has non-background
+pixels outside the 16:9 safe band, or any transparent or near-white pixel in
+the corners; both are mechanical checks. (3) Better still, accept an
+optional second asset (`launcher_icon`) sized for the tile, so an icon does
+not have to be a compromise between two aspect ratios.
+
+[m]: https://developer.amazon.com/docs/vega/0.24/manifest-package
