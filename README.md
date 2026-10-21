@@ -78,7 +78,7 @@ vega run-app $(find build -name '*_x86_64.vpkg' -path '*Debug*' | head -1) com.b
 ```
 
 ```bash
-npm test                                   # app: 156 tests
+npm test                                   # app: 157 tests
 python -m unittest discover backend/tests  # backend: 37 tests
 npm run lint
 npx tsc --noEmit
