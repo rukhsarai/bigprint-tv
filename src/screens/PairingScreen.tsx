@@ -4,7 +4,6 @@ import React from 'react';
 // Vega's components, not stock react-native: the Fire TV accessibility props
 // (accessibilityDescribedBy, accessibilityOrientationText) are declared here.
 import {
-  Dimensions,
   ScrollView,
   StyleSheet,
   Text,
@@ -68,8 +67,7 @@ export const PairingScreen = ({
   recentCount = 0,
   onRecent,
 }: Props) => {
-  const {scale, scaled, restored, changeScale, canGoBigger, canGoSmaller} =
-    useTextScale();
+  const {scaled, changeScale, canGoBigger, canGoSmaller} = useTextScale();
   const {colours, cycle} = useColours();
   const {dp, type} = useDesignUnits();
   // Text that follows the viewer's text size.
@@ -77,14 +75,6 @@ export const PairingScreen = ({
   const spokenCode = session ? session.code.split('').join(' ') : '';
   const processing = status === 'processing';
   const failed = status === 'error' && !!error;
-
-  // Shown in the debug line so a tester can read the logical viewport off the
-  // screen. Every size is in design pixels scaled to this window, so the
-  // layout matches the 1920 × 1080 drawing whatever the TV reports.
-  const window = Dimensions.get('window');
-  const windowText = `${Math.round(window.width)}×${Math.round(
-    window.height,
-  )} @${window.scale}x`;
 
   if (processing) {
     // The photo is on its way: the code has done its job, so the screen
@@ -297,12 +287,6 @@ export const PairingScreen = ({
           testID="colours-button"
           fontPx={30}
         />
-        <Text
-          style={[{color: colours.textSecondary, marginLeft: dp(8)}, type(22)]}>
-          {restored
-            ? `Text size ${scale}x (saved) · ${windowText}`
-            : 'Loading your settings…'}
-        </Text>
         <View style={layout.fill} />
         <Text style={[{color: colours.textSecondary}, type(22)]}>
           Left and Right to choose · Select to press · Back to leave

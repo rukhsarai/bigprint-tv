@@ -12,11 +12,14 @@ describe('useTextScale', () => {
   it('scales base sizes by the chosen step', async () => {
     const {result} = renderHook(() => useTextScale());
     await waitFor(() => expect(result.current.restored).toBe(true));
-    expect(result.current.scaled(24)).toBe(24);
+    // Starts at 1.5x: large print is the product, 1x is for people who do
+    // not need it.
+    expect(result.current.scale).toBe(1.5);
+    expect(result.current.scaled(24)).toBe(36);
 
     act(() => result.current.changeScale(1));
-    expect(result.current.scale).toBe(1.25);
-    expect(result.current.scaled(24)).toBe(30);
+    expect(result.current.scale).toBe(2);
+    expect(result.current.scaled(24)).toBe(48);
   });
 });
 

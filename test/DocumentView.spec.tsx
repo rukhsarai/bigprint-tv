@@ -171,7 +171,7 @@ describe('DocumentView', () => {
     openSettings();
     fireEvent.press(screen.getByTestId('control-Bigger text'));
     await waitFor(async () =>
-      expect(await AsyncStorage.getItem('bigprint.textScale')).toBe('1.25'),
+      expect(await AsyncStorage.getItem('bigprint.textScale')).toBe('2'),
     );
   });
 
@@ -355,7 +355,7 @@ describe('DocumentView settings', () => {
     );
     await settled();
     openSettings();
-    expect(screen.getByText('Text size 1x')).toBeTruthy();
+    expect(screen.getByText('Text size 1.5x')).toBeTruthy();
     expect(screen.getByTestId('control-Colours-dark').props.accessibilityState.selected).toBe(true);
     fireEvent.press(screen.getByTestId('control-Colours-light'));
     expect(screen.getByTestId('control-Colours-light').props.accessibilityState.selected).toBe(true);
@@ -442,6 +442,20 @@ describe('DocumentView views', () => {
       ),
     ).toBeTruthy();
     expect(screen.queryByTestId('line-2')).toBeNull();
+  });
+
+  it('keeps focus in Settings when a view is chosen', async () => {
+    show({document: letter});
+    await settled();
+    expect(screen.getByTestId('line-0').props.hasTVPreferredFocus).toBe(true);
+    openSettings();
+    // Choosing a view re-creates the lines; the first must not pull focus
+    // out of the panel while it is open.
+    fireEvent.press(screen.getByTestId('control-View-points'));
+    expect(screen.getByTestId('line-0').props.hasTVPreferredFocus).toBe(false);
+    expect(screen.getByTestId('control-Done')).toBeTruthy();
+    fireEvent.press(screen.getByTestId('control-Done'));
+    expect(screen.getByTestId('line-0').props.hasTVPreferredFocus).toBe(true);
   });
 
   it('remembers the chosen view for the next letter', async () => {

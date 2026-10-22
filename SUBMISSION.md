@@ -30,8 +30,8 @@ Verified today, 19 October, from a machine outside AWS with no Fire TV, by
 | Voice ready after pressing Listen (Polly, on request) | 3.6 s | 3 s |
 | Audio served | 340 KB MP3 | 276 KB MP3 |
 
-App: 156 Jest tests, typecheck clean, 0 lint errors. Backend: 37 unit tests.
-Licence: MIT. Friction log: 10 entries.
+App: 157 Jest tests, typecheck clean, 0 lint errors. Backend: 37 unit tests.
+Licence: MIT. Friction log: 11 entries.
 
 ---
 
@@ -82,7 +82,7 @@ design decisions that are *not* obvious are the ones to point at: reading
 first and voice on request, numbers come from OCR and never from the model,
 a letter is data not instructions (scam post targets exactly this audience).
 
-**Bonuses.** Friction log: 10 entries in `FRICTION_LOG.md`, each with
+**Bonuses.** Friction log: 11 entries in `FRICTION_LOG.md`, each with
 task, steps, expected, actual, severity, workaround and a suggestion. Two
 are high severity and were real blockers (path with spaces; public Function
 URL 403). Mini challenges: **AWS Builder** (Lambda, API Gateway, S3,
@@ -142,97 +142,113 @@ accessibility work.
 
 **Title:** BigPrint TV
 
-**Tagline:** Photograph a letter with your phone. It appears on your Fire TV
-in very large print, with every number checked, and reads itself aloud.
+**Tagline:** The letter you can't read anymore, in very large print on the
+TV you already own. Every number checked. Read aloud when you ask.
 
-**About line:** Built in Pakistan for every living room with a Fire TV. First
-market: the United States, where Fire TV and Vega OS live.
+**About line:** Built in Pakistan, by someone who needed it, for every
+living room with a Fire TV. First market: the United States, where Fire TV
+and Vega OS live.
 
 **Inspiration**
 
-A few months ago I got solar retinopathy. Suddenly I could not read the
-messages on my phone, and I could not read the text on a page either. Things
-I had always done without thinking, a text from a friend, a letter on the
-table, were out of reach, and I was worried. Then I thought: this is not only
-my problem. Millions of people live with it every day, most of them older,
-and their post keeps arriving. I decided to solve it, for me and for them.
+A few months ago I damaged my eyes looking at the sun. Solar retinopathy.
+The scar is one tiny spot, right in the centre of my vision, which happens
+to be exactly where reading lives. My phone turned into a smudge. The post
+on the table turned into shapes. A bill, a letter from the clinic, a note
+from a friend: I could hold them, I just couldn't read them. I kept
+wishing for something very simple, a big reader for text.
 
-The answer was already in the room: a large screen that most people own and
-know how to drive with a remote, and a phone in a relative's hand to act as
-the camera. BigPrint TV is that idea, built.
+Then one evening I looked up, and it was already in the room. The biggest
+screen in the house, two metres away, with a remote I could use with my
+eyes closed. Millions of people live with sight loss, most of them older,
+and their mail never stops arriving. Their television is already there
+too. So I built the thing I was wishing for.
 
 **What it does**
 
-The TV shows a QR code. Scanning it opens a one-button page on any phone:
-take a photo of the letter. About ten seconds later the letter is on the TV
-in large print, three ways: the whole letter in plain English, the main
-points, or the exact words as printed. The figures a reader must not get
-wrong, amount due, pay-by date, account number, phone number, are pinned at
-the top and never scroll away. Press Listen and the whole letter is read in a
-natural voice; press Next photo for the next page. Text size goes up to 2×,
-and there are three looks to choose from, dark, light and yellow on black,
-chosen by reading a real sentence rather than by name. Recent letters stay
-on the TV for a day, so a page left by mistake is two presses back.
+The TV shows a QR code. A relative or caregiver scans it with any phone
+and gets a page with one button: photograph the letter. That's the phone's
+whole job, it is only a camera.
+
+About ten seconds later the letter is on the TV in large print, three
+ways: the whole letter in plain English, just the main points, or the
+exact words as printed. The figures nobody can afford to get wrong, the
+amount due, the pay-by date, the account number, are pinned at the top and
+never scroll away. Press Listen and the whole letter is read in a calm,
+natural voice. Press Next photo for the next page. Text goes up to twice
+the size, and there are three looks, dark, light, and yellow on black,
+chosen on first run by reading a real sentence in each, because eyes
+disagree about what is easiest, even with the same condition. Letters stay
+on the TV for a day, so one closed by mistake is two presses back, and
+then everything is deleted. It is someone's private mail.
 
 **How we built it**
 
-React Native 0.83 for Vega OS on the TV. Two AWS Lambda functions and one S3
-bucket, behind an API Gateway HTTP API. The processing function reads the
-photo with Amazon Textract (layout and tables, so a bill's rows stay rows),
-classifies it with Amazon Nova Lite, extracts key figures with Textract's
-expense model, has Nova Pro look at the photo independently to confirm the
-money figures, rewrites the page into short spoken sentences and main points
-with Nova Pro, then runs two guards: a currency the page does not print is
-never spoken, and any sentence containing a number that is not on the page
-is dropped. Amazon Polly (Joanna, US English, neural) reads the whole letter as one story, made only when
-someone presses Listen. The phone page converts HEIC to JPEG and downscales
-in the browser. Audio on the TV uses Vega's W3C media AudioPlayer.
+React Native 0.83 on Vega OS for the TV app. Behind it, two AWS Lambda
+functions and one S3 bucket, nothing running between letters. Amazon
+Textract reads the photo with layout and tables, so a bill's rows stay
+rows. Amazon Nova Lite classifies the page. Textract's expense model pulls
+the money figures, and Nova Pro looks at the photo independently with one
+power only: it can veto a figure it disagrees with, never add one. Nova
+Pro then rewrites the page into short spoken sentences, and two guards run
+last: a currency the page does not print is never spoken, and any sentence
+containing a number that is not on the page is dropped. Amazon Polly makes
+the voice, only when someone presses Listen, so a letter nobody listens to
+costs nothing to voice. The phone page converts iPhone HEIC photos to JPEG
+in the browser.
 
 **Challenges we ran into**
 
-A Lambda Function URL configured exactly as documented answered 403 to
-everyone; an API Gateway HTTP API in front of the function fixed it with no
-code change. The build broke on a path with a space. Vega's accessibility
-props only type-check when components are imported from
-`@amazon-devices/react-native-kepler`, not `react-native`. Read-aloud was
-silent until the manifest declared the audio services under `[wants]`. The
-first OCR pass turned a receipt's table into "The amount for diesel is 8"
-(right digits, wrong row), which is where the layout-aware OCR and the
-numeric guard came from. Textract's expense model confidently reported
-SUBTOTAL and TAX on a university marks certificate, so the pipeline
-classifies first and only runs it on genuine bills. Ten of these are written
-up in the friction log.
+The honest list is long, and eleven entries of it are written up in our
+friction log. The ones that shaped the product: our first OCR pass turned
+a receipt's table into "the amount for diesel is 8", right digits, wrong
+row, which is where the layout-aware OCR and the numeric guard were born.
+Textract's expense model confidently found a SUBTOTAL and TAX on a
+university certificate, so now the pipeline classifies first. A Lambda
+Function URL configured exactly as documented refused everyone with a 403;
+an API Gateway in front fixed it without a code change. Read-aloud was
+silent until the manifest declared audio services the docs don't mention.
+And the build broke because our folder name had a space in it.
 
 **Accomplishments that we're proud of**
 
-The accuracy design: on sample photographs, 17 key facts shown and 0 wrong,
-and when the page is blurry the TV says so rather than guessing. The
-accessibility work audited against Amazon's A11Y Compass, including the
-non-obvious fact that Fire TV's screen reader follows input focus, so static
-key figures had to be linked to the first focusable line or a blind user
-would never hear the amount due. A backend whose public surface cannot call
-any AI service, so abuse costs the service a bounded amount per day. 156
-app tests and 37 backend tests, including WCAG contrast on every colour
-pair.
+The thing we are proudest of is what the app refuses to do. Numbers never
+come from the language model. A disputed figure is hidden, not shown. On
+our sample photographs, every key fact the TV displayed was correct, 17 of
+17, and when a page is blurry the TV says "Check: some words were hard to
+read" instead of guessing. For a reader who cannot easily check the paper,
+a confidently wrong number is worse than no number, so we built the whole
+pipeline around that sentence.
+
+We are also proud of the accessibility work: every colour pair tested at
+WCAG 7:1 in the test suite, and the non-obvious Fire TV fact that the
+screen reader follows input focus, so the pinned key facts had to be
+linked to the first focusable line or a blind user would never hear the
+amount due, which is the entire point of the app. Scam post targets
+exactly this audience, so a letter is treated as data, never as
+instructions, and the public endpoint cannot call any AI service at all.
+157 app tests and 37 backend tests.
 
 **What we learned**
 
-A language model must never be the source of a number. Reading on the TV is
-the main use and the voice is optional, so make the voice on request and
-let the text arrive first. Old eyes disagree about polarity even within one
-condition, so let the viewer choose by reading. A friction log is worth
-keeping from day one.
+That reading is the product and the voice is a gift, so the text must
+arrive first and the voice should be made on request. That a language
+model must never be the source of a number. That older eyes disagree about
+polarity even within one eye condition, so the viewer should choose by
+reading, not by name. And that a friction log kept from day one is worth
+more than memory.
 
 **What's next**
 
-A physical Fire TV run with VoiceView, then distribution through the people
-who reach this audience: adult children, caregivers, and sight-loss charities in
-each market, such as the American Foundation for the Blind and Prevent Blindness
-in the US, and RNIB and the Macular Society in the UK. The US comes first,
-because that is where Fire TV and Vega OS are; the app already works in English
-for the UK, Germany, Japan and India. A per-TV allow-list so only a paired phone
-can send, CloudFront with rate limiting in front of the API, and a batch
-mode so a carer can photograph a whole pile of post at once.
+A run on a physical Fire TV with VoiceView, the screen reader, which we
+have not done yet and say so plainly. Then distribution through the people
+who actually reach this audience: adult children, caregivers, and
+sight-loss organizations, such as the American Foundation for the Blind
+and Prevent Blindness in the US, and the RNIB and the Macular Society in
+the UK. A per-TV allow-list so only a paired phone can send, CloudFront in
+front of the API, and a batch mode so a caregiver can photograph a whole
+pile of post at once. A letter read on screen costs about two to three
+cents, which makes a free or charity-funded service realistic.
 
 **Built with:** react-native, vega-os, fire-tv, aws-lambda, amazon-api-gateway,
 amazon-s3, amazon-textract, amazon-bedrock, amazon-nova, amazon-polly,
@@ -280,9 +296,14 @@ long versions with reproduction steps are the numbered entries in
   work well once the path has no spaces; the build fails on a path with a
   space with an error that names a directory you never typed (#1). The build
   silently appends modules to `manifest.toml` (#9). `vega project doctor`
-  flags officially supported libraries as unknown (#4). Suggest: quote the
-  path, print one line when autolinking edits the manifest, include
-  system-deployed libraries in the managed list.
+  flags officially supported libraries as unknown (#4). The manifest
+  reference documents `icon` only as the Settings icon, but the home screen
+  renders the same 512 x 512 file in a 16:9 tile and crops it, so an icon
+  drawn to the documented spec arrives on the home screen with its top and
+  bottom cut off, and nothing warns (#11). Suggest: quote the path, print
+  one line when autolinking edits the manifest, include system-deployed
+  libraries in the managed list, document the icon's 16:9 safe area, and
+  either warn in `vpt validate` or accept a separate launcher asset.
 - **React Native for Vega 0.83 (`react-native-kepler` 4.0.1).** Solid and
   fast on the virtual device (cold launch under a second for a 2.5 MB
   release build). Accessibility props are Kepler-only imports but the docs

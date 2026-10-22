@@ -3,8 +3,15 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const TEXT_SCALE_KEY = 'bigprint.textScale';
 
-/** Text scale steps. 1 is the baseline; users who need more go up. */
+/** Text scale steps. 1 is ordinary TV body text; the product starts above it. */
 export const SCALE_STEPS = [1, 1.25, 1.5, 2];
+
+/**
+ * The size before anyone touches a button. 1x is the size any TV app uses,
+ * and this app's promise is large print, so it starts at 1.5x and Smaller
+ * is there for people who do not need it.
+ */
+export const DEFAULT_SCALE = 1.5;
 
 export type TextScale = {
   /** Current multiplier, e.g. 1.5 */
@@ -31,7 +38,9 @@ export type TextScale = {
  * written on every change rather than only at exit.
  */
 export const useTextScale = (): TextScale => {
-  const [scaleIndex, setScaleIndex] = useState(0);
+  const [scaleIndex, setScaleIndex] = useState(
+    SCALE_STEPS.indexOf(DEFAULT_SCALE),
+  );
   const [restored, setRestored] = useState(false);
 
   useEffect(() => {

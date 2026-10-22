@@ -4,8 +4,11 @@ schema-version = 1
 title = "BigPrint TV"
 version = "0.1.0"
 id = "com.bigprint.tv"
-# 512 x 512 PNG under assets/image, shown in Settings > Applications. The
-# @image/ prefix is how the manifest refers to that folder.
+# 512 x 512 PNG under assets/image. The @image/ prefix is how the manifest
+# refers to that folder. Settings > Applications shows the whole square, but
+# "Your apps" on the home screen crops the same file to 16:9, so the artwork
+# has to stay inside y 112..400. Drawn by tools/make_icon.py; see
+# FRICTION_LOG.md #11 before redrawing it.
 icon = "@image/icon.png"
 
 [os.version]

@@ -27,8 +27,8 @@ exports[`App matches snapshot 1`] = `
           "color": "#FFFFFF",
         },
         {
-          "fontSize": 17,
-          "lineHeight": 24,
+          "fontSize": 26,
+          "lineHeight": 36,
         },
       ]
     }
@@ -262,8 +262,8 @@ exports[`App matches snapshot 1`] = `
                     "color": "#FFFFFF",
                   },
                   {
-                    "fontSize": 12,
-                    "lineHeight": 17,
+                    "fontSize": 18,
+                    "lineHeight": 25,
                   },
                 ]
               }
@@ -431,8 +431,8 @@ exports[`App matches snapshot 1`] = `
                     "color": "#FFFFFF",
                   },
                   {
-                    "fontSize": 12,
-                    "lineHeight": 17,
+                    "fontSize": 18,
+                    "lineHeight": 25,
                   },
                 ]
               }
@@ -663,8 +663,8 @@ exports[`App matches snapshot 1`] = `
                     "color": "#FFFFFF",
                   },
                   {
-                    "fontSize": 12,
-                    "lineHeight": 17,
+                    "fontSize": 18,
+                    "lineHeight": 25,
                   },
                 ]
               }
@@ -715,8 +715,8 @@ exports[`App matches snapshot 1`] = `
                 "color": "#FFFFFF",
               },
               {
-                "fontSize": 12,
-                "lineHeight": 17,
+                "fontSize": 18,
+                "lineHeight": 25,
               },
             ]
           }
@@ -1014,7 +1014,7 @@ exports[`App matches snapshot 1`] = `
         {
           "busy": undefined,
           "checked": undefined,
-          "disabled": true,
+          "disabled": false,
           "expanded": undefined,
           "selected": undefined,
         }
@@ -1030,7 +1030,7 @@ exports[`App matches snapshot 1`] = `
       accessible={true}
       collapsable={false}
       focusable={true}
-      isPressable={false}
+      isPressable={true}
       onBlur={[Function]}
       onClick={[Function]}
       onFocus={[Function]}
@@ -1053,11 +1053,11 @@ exports[`App matches snapshot 1`] = `
             "flexDirection": "row",
           },
           {
-            "borderStyle": "dashed",
+            "borderStyle": "solid",
           },
           {
-            "backgroundColor": "#000000",
-            "borderColor": "#767676",
+            "backgroundColor": "#222222",
+            "borderColor": "#AAAAAA",
             "borderRadius": 4,
             "borderWidth": 2,
             "height": 28,
@@ -1075,7 +1075,7 @@ exports[`App matches snapshot 1`] = `
               "fontWeight": "700",
             },
             {
-              "color": "#CCCCCC",
+              "color": "#FFFFFF",
             },
             {
               "fontSize": 12,
@@ -1166,22 +1166,6 @@ exports[`App matches snapshot 1`] = `
         Colors: Dark
       </Text>
     </View>
-    <Text
-      style={
-        [
-          {
-            "color": "#CCCCCC",
-            "marginLeft": 3,
-          },
-          {
-            "fontSize": 9,
-            "lineHeight": 13,
-          },
-        ]
-      }
-    >
-      Text size 1x (saved) · 750×1334 @2x
-    </Text>
     <View
       style={
         {
