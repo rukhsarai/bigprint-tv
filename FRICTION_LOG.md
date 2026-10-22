@@ -1,7 +1,36 @@
 # Friction Log — Vega OS / Fire TV development
 
-Recorded while building BigPrint TV (Vega OS, React Native 0.83, Vega SDK 0.24.12112,
-Vega CLI 1.4.4) on Linux Mint 22 (Ubuntu 24.04 base).
+Eleven developer-experience findings recorded while building BigPrint TV
+(Vega OS, React Native 0.83, Vega SDK 0.24.12112, Vega CLI 1.4.4) on Linux
+Mint 22 (Ubuntu 24.04 base), between 1 and 22 October 2026. Every entry was
+written the day it happened, with the exact command and the exact error, so
+each can be reproduced by someone who was not there.
+
+## At a glance
+
+| # | Finding | Severity | What it cost | Status |
+|---|---|---|---|---|
+| [1](#1-build-fails-when-the-project-path-contains-a-space) | Build fails when the project path contains a space | **High** | All builds blocked for half a day; the error names a directory you never typed | Worked around (renamed the folder) |
+| [2](#2-accessibility-props-are-undocumented-as-kepler-only-imports) | Accessibility props are Kepler-only imports, undocumented | Medium | TypeScript errors while following the official accessibility guide | Worked around |
+| [3](#3-post-open-debugger-reports-success-but-no-browser-opens) | `POST /open-debugger` says 200, opens nothing | Medium | React Native DevTools unreachable by the documented route | Worked around |
+| [4](#4-vega-project-doctor-flags-an-officially-supported-library) | `vega project doctor` flags a supported library as unknown | Low | Minutes, but it teaches you to ignore the tool | Open |
+| [5](#5-screenshots-are-unavailable-on-the-virtual-device) | No screenshots on the virtual device; `vega device info` is empty | Medium | No automated visual checks; demo captured with a screen recorder | Open |
+| [6](#6-jest-setup-for-the-ported-asyncstorage-is-undocumented) | Jest setup for the ported AsyncStorage is undocumented | Low | An hour | Worked around |
+| [7](#7-audioplayer-in-react-native-w3cmedia-is-documented-only-for-mse-pre-buffering) | `AudioPlayer` documented only for MSE; speech playback inferred from types | Low | Read the type definitions instead of the docs | Worked around |
+| [8](#8-s3-answers-accessdenied-for-a-key-that-simply-does-not-exist) | S3 says AccessDenied for a key that does not exist | Medium | An evening diagnosing a policy that was fine | Understood |
+| [9](#9-the-build-silently-rewrites-manifesttoml) | The build silently rewrites `manifest.toml` | Low | Confusing diffs | Open |
+| [10](#10-a-public-lambda-function-url-configured-exactly-as-documented-answers-403-to-everyone) | A public Lambda Function URL, configured as documented, answers 403 | **High** | The TV could not reach its backend; a day lost | Worked around (API Gateway in front) |
+| [11](#11-the-launcher-crops-the-app-icon-to-169-and-the-manifest-reference-does-not-say-so) | The launcher crops the icon to 16:9; the manifest reference does not say so | Medium | A visibly broken icon, found by eye three days before submission | Worked around (16:9 safe area) |
+
+Two were real blockers (1 and 10). Three are still open and would be fixed
+by a documentation line each (4, 5, 9). Entry 11 includes a proposed safe-area
+spec for the icon; entry 1 includes the exact unquoted subprocess call.
+
+**What would have saved the most time, in order:** quoting the path in
+`kepler-module-manifest-builder` (#1); one sentence in the setup guide listing
+the `[wants]` audio services and the Kepler-only accessibility imports (#2,
+and the silent-audio gotcha noted in CONTEXT.md); a note on the Function URL
+behaviour or a working example (#10); frame capture on the virtual device (#5).
 
 Format per entry: task attempted → steps → expected vs actual → severity →
 workaround → suggestion.

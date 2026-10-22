@@ -85,11 +85,15 @@ against the live backend, which stays up through the judging window
    vega run-app com.bigprint.tv.main
    ```
 
-3. Scan the QR code on the TV with any phone and photograph a page. Two
-   sample bills are in [samples/](samples/): a clean one, and a deliberately
-   blurry one that makes the TV say "Check: some words were hard to read"
-   instead of guessing. Open one on a laptop screen and photograph that, or
-   print it.
+3. Scan the QR code on the TV with any phone and photograph a page. The
+   bills used in the demo video and the round-trip test are in
+   [samples/](samples/): `us-bill.jpg` (the electricity bill in the video),
+   `us-bill-blurry.jpg` (the same bill, deliberately poor, which makes the TV
+   say "Check: some words were hard to read" instead of guessing), and
+   `uk-water-bill.jpg` (the water bill `round_trip.sh` sends, in pounds).
+   Open one on a laptop screen and photograph that, or print it.
+   A step-by-step guide with screenshots is in
+   [JUDGES_GUIDE.pdf](JUDGES_GUIDE.pdf).
 4. On the TV, try **Listen**, **Settings → Show** (whole letter, main points,
    exact words), text size up to 2×, and the three looks.
 
