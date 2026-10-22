@@ -67,6 +67,40 @@ Every number in the spoken text must exist in the OCR output, and a key figure
 is shown only when two independent readers agree. For this audience a
 confidently wrong number is worse than no number.
 
+## For judges: try it in five minutes
+
+You do not need an AWS account. The app is built against the live backend,
+which stays up through the judging window (to 20 November 2026).
+
+**On the Vega virtual device or a Fire TV running Vega OS**
+
+1. Download the package for your target from the
+   [latest release](https://github.com/rukhsarai/bigprint-tv/releases/latest):
+   `x86_64` for the virtual device, `aarch64` for a Fire TV.
+2. Install and launch:
+
+   ```bash
+   vega install-app bigprint-tv-0.1.0_x86_64.vpkg
+   vega run-app com.bigprint.tv.main
+   ```
+
+3. Scan the QR code on the TV with any phone, photograph a letter, a bill
+   or a note, and watch it arrive on the screen. Press **Listen** to hear it.
+   A sample bill to photograph is in [samples/us-bill.jpg](samples/us-bill.jpg);
+   a deliberately blurry one is next to it.
+
+**Without a device**
+
+```bash
+backend/tools/round_trip.sh              # live backend, end to end, ~15 s
+npm ci && npm test                       # app: 157 tests
+python3 -m unittest discover backend/tests   # backend: 37 tests
+```
+
+`round_trip.sh` opens a pairing session, uploads a sample photo, waits for
+the text, and prints the key facts the pipeline extracted, which is the whole
+product minus the screen.
+
 ## Quick start
 
 ```bash
