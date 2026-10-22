@@ -69,8 +69,9 @@ confidently wrong number is worse than no number.
 
 ## For judges: try it in five minutes
 
-You do not need an AWS account. The app is built against the live backend,
-which stays up through the judging window (to 20 November 2026).
+You do not need an AWS account, a sign-in, or any setup. The app is built
+against the live backend, which stays up through the judging window
+(to 20 November 2026).
 
 **On the Vega virtual device or a Fire TV running Vega OS**
 
@@ -84,10 +85,13 @@ which stays up through the judging window (to 20 November 2026).
    vega run-app com.bigprint.tv.main
    ```
 
-3. Scan the QR code on the TV with any phone, photograph a letter, a bill
-   or a note, and watch it arrive on the screen. Press **Listen** to hear it.
-   A sample bill to photograph is in [samples/us-bill.jpg](samples/us-bill.jpg);
-   a deliberately blurry one is next to it.
+3. Scan the QR code on the TV with any phone and photograph a page. Two
+   sample bills are in [samples/](samples/): a clean one, and a deliberately
+   blurry one that makes the TV say "Check: some words were hard to read"
+   instead of guessing. Open one on a laptop screen and photograph that, or
+   print it.
+4. On the TV, try **Listen**, **Settings → Show** (whole letter, main points,
+   exact words), text size up to 2×, and the three looks.
 
 **Without a device**
 
@@ -100,6 +104,22 @@ python3 -m unittest discover backend/tests   # backend: 37 tests
 `round_trip.sh` opens a pairing session, uploads a sample photo, waits for
 the text, and prints the key facts the pipeline extracted, which is the whole
 product minus the screen.
+
+**What to look for.** Every number on the screen came from OCR, never from a
+language model; a second reader can veto a figure, nothing can add one, and
+any sentence with a number that is not on the page is dropped. The first-run
+screen lets you pick a look by reading a real sentence, not by name. Back on
+the remote never exits by accident.
+
+**Before you photograph a real letter.** Photos go to AWS (us-east-1) to be
+read, and the photo, text and audio are deleted automatically after one day.
+It is still a hackathon deployment, so use the samples, or a letter you do
+not mind a demo server seeing for a day. There is a cap of 200 pages a day
+across everyone; if the TV says the service is busy, that is why.
+
+**Known limits** are listed plainly in the release notes and in
+[CONTEXT.md](CONTEXT.md): no run yet on a physical Fire TV with VoiceView,
+and a pairing-screen overflow at the largest text sizes.
 
 ## Quick start
 
