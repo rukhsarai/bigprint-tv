@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>BigPrint TV — How to try it</title>
+<style>
+  @page { size: A4; margin: 18mm 16mm; }
+  :root { --ink: #1a1a1a; --muted: #5a5a5a; --rule: #d8d4cc; --accent: #7a3b12; }
+  body { font-family: "Source Sans 3", "Noto Sans", Arial, sans-serif;
+         color: var(--ink); font-size: 10.5pt; line-height: 1.45; margin: 0; }
+  h1 { font-size: 20pt; margin: 0 0 2mm; letter-spacing: -0.2pt; }
+  h2 { break-after: avoid; break-inside: avoid; font-size: 13pt; margin: 7mm 0 2mm; padding-bottom: 1mm;
+       border-bottom: 1px solid var(--rule); }
+  h2:first-of-type { margin-top: 5mm; }
+  p { margin: 0 0 2.5mm; }
+  .lede { color: var(--muted); font-size: 10pt; margin-bottom: 4mm; }
+  ol { margin: 0 0 3mm; padding-left: 5mm; }
+  li { margin-bottom: 2mm; }
+  code, pre { font-family: "DejaVu Sans Mono", monospace; font-size: 9pt; }
+  pre { background: #f4f2ed; border: 1px solid var(--rule); border-radius: 2mm;
+        padding: 2.5mm 3mm; margin: 2mm 0 3mm; white-space: pre-wrap; }
+  figure { margin: 2mm 0 4mm; break-inside: avoid; }
+  figure img { width: 74%; border: 1px solid var(--rule); border-radius: 1.5mm; display: block; }
+  figcaption { font-size: 8.5pt; color: var(--muted); margin-top: 1.2mm; }
+  .pair { display: flex; gap: 4mm; }
+  .pair figure { flex: 1; margin-bottom: 3mm; }
+  .pair figure img { width: 100%; }
+  .check { border: 1px solid var(--accent); border-left: 3px solid var(--accent);
+           border-radius: 1.5mm; padding: 2.5mm 3mm; margin: 2mm 0 4mm; background: #fdf8f4;
+           break-inside: avoid; }
+  .check b { color: var(--accent); }
+  table { break-inside: avoid; border-collapse: collapse; width: 100%; font-size: 9.5pt; margin: 2mm 0 3mm; }
+  th, td { text-align: left; border-bottom: 1px solid var(--rule); padding: 1.5mm 2mm; vertical-align: top; }
+  th { font-size: 8.5pt; text-transform: uppercase; letter-spacing: 0.4pt; color: var(--muted); }
+  .foot { margin-top: 6mm; padding-top: 2mm; border-top: 1px solid var(--rule);
+          font-size: 8.5pt; color: var(--muted); }
+  .avoid { break-inside: avoid; }
+</style>
+</head>
+<body>
+
+<h1>BigPrint TV — how to try it</h1>
+<p class="lede">Five minutes with a Vega virtual device; fifteen seconds without one.
+No AWS account, no sign-in. Backend live to 20 November 2026.</p>
+
+<p><b>What it is.</b> Photograph a letter or bill with any phone. It appears on the
+television in very large print, with the figures that matter pinned at the top, and one
+press reads it aloud. Built for people with age-related sight loss, on the screen they
+already own.</p>
+
+<h2>1. Install</h2>
+<p>You need the Vega SDK with its virtual device, or a Fire TV running Vega OS in
+developer mode. Download the package for your target from
+<code>github.com/rukhsarai/bigprint-tv/releases/latest</code> (also in the Devpost upload):
+<code>x86_64</code> for the virtual device, <code>aarch64</code> for a Fire TV.</p>
+<pre>vega virtual-device start                      # skip on a real Fire TV
+vega install-app bigprint-tv-0.1.0_x86_64.vpkg
+vega run-app com.bigprint.tv.main</pre>
+
+<h2>2. Run it, step by step</h2>
+<ol>
+  <li><b>Pick a look.</b> The app opens on the same sentence in dark, light, and yellow
+  on black. Move with the D-pad, press Select on the one you can read best.</li>
+</ol>
+<figure>
+  <img src="../video/stills/first_run_three_looks.png" alt="First-run screen: the same sentence in three looks">
+  <figcaption>Step 1 — pick a look by reading a real sentence, not by name.</figcaption>
+</figure>
+<ol start="2">
+  <li><b>Scan the QR code.</b> The TV shows a QR code and a six-digit code. Scan it with
+  any phone's camera; a web page with one button opens. Nothing to install on the phone.</li>
+</ol>
+<figure>
+  <img src="../video/stills/pairing_screen.png" alt="Pairing screen with QR code and six-digit code">
+  <figcaption>Step 2 — the pairing screen. Any phone's camera opens it.</figcaption>
+</figure>
+<ol start="3">
+  <li><b>Photograph the bill.</b> Open <code>samples/us-bill.jpg</code> on a laptop screen
+  and photograph that, or print it. Hold the phone square to the page, fill the frame,
+  press the one button.</li>
+  <li><b>Read it on the TV.</b> The TV says <i>Reading your letter</i>, and about ten
+  seconds later the page is on screen. Move line by line with the D-pad; the focused line
+  has a thick yellow ring.</li>
+</ol>
+<figure>
+  <img src="../video/stills/letter_pinned_figures.png" alt="The bill on the TV in large print with key figures pinned at the top">
+  <figcaption>Step 4 — the key figures pinned above the letter; the ringed line is the focus.</figcaption>
+</figure>
+<div class="check">
+  <p style="margin:0"><b>Check the TV against the paper.</b> It should show amount due
+  <b>$92.58</b>, due date <b>October 28, 2026</b>, statement date October 12, 2026,
+  account <b>4471 0392 11</b>. Every one of those came from OCR. A figure on the TV that
+  is not on the paper is a bug worth reporting.</p>
+</div>
+
+<h2>3. Four things to try</h2>
+<ol>
+  <li><b>Listen.</b> Press the first button at the bottom. The whole page is read aloud in
+  a natural voice and the button becomes <i>Pause</i>. The voice is made only on request,
+  which is why the text arrives first.</li>
+</ol>
+<figure>
+  <img src="../video/stills/blurry_photo_check_panel.png" alt="The letter mid-playback: the first button reads Keep listening">
+  <figcaption>Listening, paused. While you read, the next photo can already be waiting —
+  the middle button says so.</figcaption>
+</figure>
+<ol start="2">
+  <li><b>Three ways to read it.</b> <i>Settings → Show</i> switches between the whole
+  letter in plain English, just the main points, and the exact words as printed, with
+  table rows kept as rows.</li>
+</ol>
+<div class="pair">
+  <figure>
+    <img src="../video/stills/settings_main_points.png" alt="Main points view">
+    <figcaption>Main points.</figcaption>
+  </figure>
+  <figure>
+    <img src="../video/stills/settings_exact_words.png" alt="Exact words view">
+    <figcaption>Exact words.</figcaption>
+  </figure>
+</div>
+<ol start="3">
+  <li><b>Text size and looks.</b> <i>Settings → Text size</i> goes up to 2× and the pinned
+  figures never scroll away; <i>Settings → Look</i> switches dark, light, and yellow on
+  black. Every colour pair passes WCAG 7:1, checked in the test suite.</li>
+</ol>
+<figure>
+  <img src="../video/stills/settings_yellow_on_black.png" alt="The light look at 2x text size with the settings panel open">
+  <figcaption>The light look at 2× text: the pinned figures stay put while the letter grows.</figcaption>
+</figure>
+<ol start="4">
+  <li><b>A page that is hard to read.</b> Photograph <code>samples/us-bill-blurry.jpg</code>,
+  a deliberately poor photo of the same bill. The TV puts a <i>Check: some words were hard
+  to read</i> line above the letter and tells you to compare it with the paper, instead of
+  presenting a bad read as a clean one.</li>
+</ol>
+<figure>
+  <img src="../video/stills/blurry_check_panel_92.png" alt="The blurry page on the TV, with a Check line above the pinned figures">
+  <figcaption>The blurry page. The pinned figures still match the paper — $92.58,
+  October 28, October 12 — while the Check line warns that lines further down, such as the
+  account and phone numbers, came out garbled.</figcaption>
+</figure>
+<p class="avoid"><b>Next photo and Recent letters.</b> <i>Next photo</i> returns to the
+pairing screen; the phone page is still open, so it is one more tap. Press <i>Back</i> on
+the remote from the letter for <i>Recent letters</i>, held on the TV for a day and then
+deleted. Back never exits the app by accident.</p>
+
+<h2>4. Without a device</h2>
+<p>From a terminal with <code>curl</code> and Python, in the repository:</p>
+<pre>backend/tools/round_trip.sh                     # live backend, end to end, ~15 s
+backend/tools/round_trip.sh samples/us-bill.jpg # the same with the video's bill
+
+npm ci &amp;&amp; npm test                              # app: 157 tests
+python3 -m unittest discover backend/tests      # backend: 37 tests</pre>
+<p>It opens a pairing session, uploads a photo, waits for the text, asks for the voice,
+and prints the key facts the pipeline extracted with the time each step took. That is the
+whole product minus the screen.</p>
+
+<h2>5. What is going on underneath</h2>
+<table>
+  <tr><th>Step</th><th>Service</th><th>Rule</th></tr>
+  <tr><td>Read the photo, with layout and tables</td><td>Amazon Textract</td><td>A bill's rows stay rows</td></tr>
+  <tr><td>Classify the page</td><td>Amazon Nova Lite</td><td>Bill, letter, receipt, certificate</td></tr>
+  <tr><td>Pull the money figures</td><td>Textract AnalyzeExpense</td><td>Numbers come from OCR, never from a model</td></tr>
+  <tr><td>Second look at the photo</td><td>Amazon Nova Pro</td><td>May veto a figure; can never add one</td></tr>
+  <tr><td>Rewrite into spoken sentences</td><td>Amazon Nova Pro</td><td>Any sentence with a number not on the page is dropped</td></tr>
+  <tr><td>Voice, on request</td><td>Amazon Polly</td><td>Made only when someone presses Listen</td></tr>
+</table>
+
+<p class="foot"><b>Before you photograph a real letter.</b> Photos go to AWS (us-east-1)
+to be read; photo, text and audio are deleted after one day. It is a hackathon deployment,
+so use the samples or a letter you do not mind a demo server seeing. There is a cap of
+200 pages a day across everyone. <b>Known limits:</b> no run yet on a physical Fire TV
+with VoiceView, and a pairing-screen overflow at the largest text sizes.</p>
+
+</body>
+</html>
