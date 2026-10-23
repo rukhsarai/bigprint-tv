@@ -1,8 +1,8 @@
 # Friction Log — Vega OS / Fire TV development
 
-Eleven developer-experience findings recorded while building BigPrint TV
+Twelve developer-experience findings recorded while building BigPrint TV
 (Vega OS, React Native 0.83, Vega SDK 0.24.12112, Vega CLI 1.4.4) on Linux
-Mint 22 (Ubuntu 24.04 base), between 1 and 22 October 2026. Every entry was
+Mint 22 (Ubuntu 24.04 base), between 1 and 23 October 2026. Every entry was
 written the day it happened, with the exact command and the exact error, so
 each can be reproduced by someone who was not there.
 
@@ -395,3 +395,43 @@ optional second asset (`launcher_icon`) sized for the tile, so an icon does
 not have to be a compromise between two aspect ratios.
 
 [m]: https://developer.amazon.com/docs/vega/0.24/manifest-package
+
+---
+
+## 12. A `backgroundColor` on a nested `<Text>` is not painted, and the text keeps its colour
+
+**Severity: Medium — the mark it was drawing disappeared entirely on the
+device, while every test and the typecheck passed.**
+
+**Task:** Put a small highlighted mark inside a sentence. Where the backend
+cannot vouch for a money figure, the sentence keeps its shape and the figure
+is replaced by a badge, so the reader sees a hole rather than a number the
+app does not trust.
+
+**Steps:** Render the line as one `<Text>` with a nested `<Text>` for the
+badge, styled `{color: badgeText, backgroundColor: badgeFill}` — the ordinary
+React Native way to highlight part of a string. Build, install, look at it.
+
+**Expected:** The badge drawn as an inverted chip inside the line, as it is
+in Jest with `@testing-library/react-native` and in React Native on phones.
+
+**Actual:** On the virtual device the background was not painted and the
+text was drawn in the nested colour anyway, so a dark badge colour on the
+dark look came out as black on black: the badge was invisible, while still
+taking up its full width in the line. The sentence read "The total amount to
+pay is          ." with a gap and a full stop and nothing else. Nothing
+reported a problem: `npx tsc --noEmit` is clean, the Jest assertion on the
+badge text passes, the lint rules say nothing, and the device logs are
+silent. Only a screenshot showed it.
+
+**Workaround:** Carry the mark with colour instead of a fill — bold text in
+the same colour as the Check panel's edge, bracketed so it cannot be read as
+part of the sentence — and assert that colour against the background in the
+contrast test, which a chip's own pair would not have covered.
+
+**Suggestion:** Either paint `backgroundColor` on nested `<Text>` as React
+Native does, or, if the text engine cannot, say so in the React Native for
+Vega documentation's text section and have the lint rule flag the prop on a
+nested `<Text>`. A style that is silently dropped while its layout is honoured
+is the worst of both: it looks right in every test and is invisible on the
+screen.

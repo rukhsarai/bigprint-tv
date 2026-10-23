@@ -35,6 +35,9 @@ const TEXT_PAIRS: [keyof Colours, keyof Colours][] = [
   ['text', 'panelFill'],
   ['attentionWord', 'panelFill'],
   ['badgeText', 'badgeFill'],
+  // The badge that stands where an unsure figure was is text, not a chip:
+  // a background on a nested Text is not painted on Vega.
+  ['attention', 'background'],
 ];
 
 const MARK_PAIRS: [keyof Colours, keyof Colours][] = [

@@ -51,6 +51,13 @@ FACT_CONFIDENCE_FLOOR = 90.0
 OCR_CONFIDENCE_FLOOR = 90.0
 # This many rewritten lines failing the numeric guard also triggers the warning.
 GUARD_DROP_WARNING = 2
+# Stands in a sentence where a money figure the pipeline would not pin has been
+# taken out. The app draws it as a badge; the voice says it in words.
+UNSURE_MARK = "{{unsure}}"
+# Money fields: a reading of one of these that is too unsure to pin is also too
+# unsure to speak. Dates and references are left alone, for the same reason the
+# image cross-check does not touch them.
+MONEY_FIELDS = ("AMOUNT_DUE", "TOTAL")
 # Hard ceiling on what is spoken; Polly bills per character.
 MAX_LINES = 40
 MAX_LINE_CHARS = 300
@@ -181,10 +188,17 @@ class Pipeline:
         }
 
     # -- step 3: key facts, only for financial documents ------------------
-    def extract_facts(self, document: dict) -> list[tuple[str, DocumentFact]]:
-        """Returns (field_type, fact) pairs above the confidence floor."""
+    def extract_facts(self, document: dict) -> tuple[list[tuple[str, DocumentFact]], list[str]]:
+        """Returns (field_type, fact) pairs above the confidence floor, and the
+        money readings that fell below it.
+
+        The second list is what the page seems to say about money but the
+        pipeline will not put its name to. It is not shown anywhere; it is
+        there so the rewritten sentences can be masked to match.
+        """
         expense = self.textract.analyze_expense(Document=document)
         best: dict[str, tuple[str, float]] = {}
+        unsure_money: list[str] = []
         for doc in expense.get("ExpenseDocuments", []):
             for f in doc.get("SummaryFields", []):
                 type_block = f.get("Type") or {}
@@ -198,6 +212,8 @@ class Pipeline:
                     type_block.get("Confidence", 100.0),
                 ), 1)
                 if not value or conf < FACT_CONFIDENCE_FLOOR:
+                    if value and field_type in MONEY_FIELDS:
+                        unsure_money.append(value)
                     continue
                 # Keep the highest-confidence reading of each field.
                 if field_type not in best or conf > best[field_type][1]:
@@ -208,7 +224,7 @@ class Pipeline:
             if field_type in best:
                 value, conf = best[field_type]
                 facts.append((field_type, DocumentFact(FACT_LABELS[field_type], value, conf)))
-        return facts
+        return facts, unsure_money
 
     def cross_check_facts(self, image_bytes: bytes, facts: list[tuple[str, DocumentFact]]):
         """Ask Nova Pro to read the photo independently; hide any figure the two disagree on.
@@ -305,6 +321,7 @@ class Pipeline:
 
         facts: list[tuple[str, DocumentFact]] = []
         disputed: list[dict] = []
+        unsure_money: list[str] = []
         if meta["isFinancial"]:
             # The key facts and the rewrite both need only the OCR text and the
             # photo, so they run side by side: on a bill that takes a few
@@ -314,11 +331,18 @@ class Pipeline:
                 facts_job = pool.submit(self._key_facts, document, image_bytes)
                 rewrite_job = pool.submit(self.simplify, ocr, meta["kind"], image_bytes)
                 lines, summary, dropped = rewrite_job.result()
-                facts, disputed = facts_job.result()
+                facts, disputed, unsure_money = facts_job.result()
         else:
             lines, summary, dropped = self.simplify(ocr, meta["kind"], image_bytes)
 
-        money_disputed = any(d["field"] in ("AMOUNT_DUE", "TOTAL") for d in disputed)
+        money_disputed = any(d["field"] in MONEY_FIELDS for d in disputed)
+        # A figure that was not good enough to pin is not good enough to say.
+        distrusted = unsure_money + [
+            d["textract"] for d in disputed if d["field"] in MONEY_FIELDS
+        ]
+        pinned = [f.value for _, f in facts]
+        lines = mask_uncertain_money(lines, distrusted, pinned)
+        summary = mask_uncertain_money(summary, distrusted, pinned)
         low = (
             ocr.confidence < OCR_CONFIDENCE_FLOOR
             or ocr.feature != "layout"
@@ -342,6 +366,7 @@ class Pipeline:
                 "factsFound": len(facts),
                 "factsDisputed": disputed,
                 "linesDroppedByGuard": dropped,
+                "moneyMasked": sorted({_digits(v) for v in distrusted}),
             },
         )
 
@@ -349,11 +374,12 @@ class Pipeline:
     def _key_facts(self, document: dict, image_bytes: bytes):
         """Key facts with their cross-check, or nothing: never fail the whole read."""
         try:
-            facts = self.extract_facts(document)
-            return self.cross_check_facts(image_bytes, facts)
+            facts, unsure_money = self.extract_facts(document)
+            kept, disputed = self.cross_check_facts(image_bytes, facts)
+            return kept, disputed, unsure_money
         except Exception as e:  # noqa: BLE001
             print(f"   key facts unavailable, continuing without: {type(e).__name__}")
-            return [], []
+            return [], [], []
 
     def _nova(self, model_id: str, prompt: str, max_tokens: int,
               image_bytes: bytes | None = None, system: str | None = None) -> str:
@@ -715,6 +741,41 @@ def numeric_guard(lines: list[str], ocr_lines: list[str]) -> list[str]:
         if all(group_ok(g) for g in groups):
             kept.append(line)
     return kept
+
+
+# A figure as a sentence carries it, with any currency symbol or code glued on,
+# so the whole thing is replaced in one piece rather than leaving a bare "$".
+_FIGURE_IN_LINE = re.compile(
+    r"(?:[£$€]\s?)?\d[\d,]*(?:\.\d+)?(?:\s?(?:GBP|USD|EUR))?", re.I)
+
+
+def _digits(text: str) -> str:
+    return re.sub(r"\D", "", text)
+
+
+def mask_uncertain_money(lines: list[str], distrusted: list[str],
+                         pinned: list[str] | None = None) -> list[str]:
+    """Take a money figure the pipeline would not pin out of the sentences.
+
+    A reading too unsure for the key facts, or vetoed by the image cross-check,
+    is no more trustworthy inside a sentence: the warning at the top of the
+    screen says the page was hard to read while the sentence underneath states
+    an amount as fact, which is the one thing this app must not do.
+
+    The sentence keeps its shape and the figure becomes `UNSURE_MARK`, because
+    "the total amount due is <hard to read>" still tells the reader what the
+    page is about, which dropping the line does not. A figure that is pinned is
+    never masked: the same digits can be read twice, once well and once badly.
+    """
+    wanted = {_digits(v) for v in distrusted if _digits(v)}
+    wanted -= {_digits(v) for v in (pinned or []) if _digits(v)}
+    if not wanted:
+        return lines
+
+    def swap(m: re.Match) -> str:
+        return UNSURE_MARK if _digits(m.group(0)) in wanted else m.group(0)
+
+    return [_FIGURE_IN_LINE.sub(swap, line) for line in lines]
 
 
 # -- fact comparison ---------------------------------------------------------

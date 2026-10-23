@@ -18,6 +18,8 @@ from concurrent.futures import ThreadPoolExecutor
 import boto3
 from botocore.config import Config
 
+from pipeline import UNSURE_MARK
+
 VOICE = "Joanna"       # US English, clear and unhurried
 ENGINE = "neural"
 MAX_CHARS = 2900       # Polly's per-request ceiling is 3,000 billed characters
@@ -28,6 +30,11 @@ MAX_PARTS = 20         # the capture function serves story-0 to story-19
 _RETRY = Config(retries={"mode": "standard", "max_attempts": 8})
 
 
+# A masked figure is a badge on screen; the voice has to say it in words, and
+# say it where the figure would have been, so the sentence still makes sense.
+UNSURE_SPOKEN = "a figure that was too hard to read"
+
+
 def story_text(kind: str, sender: str | None, lines: list[str], low_confidence: bool = False) -> list[str]:
     """What the voice says, as a list of sentences: what the page is, the
     warning if there is one, then the letter. Someone only listening cannot
@@ -36,7 +43,10 @@ def story_text(kind: str, sender: str | None, lines: list[str], low_confidence: 
     said = [opening]
     if low_confidence:
         said.append("Some words were hard to read, so check the paper copy.")
-    said.extend(line.strip() for line in lines if line and line.strip())
+    said.extend(
+        line.strip().replace(UNSURE_MARK, UNSURE_SPOKEN)
+        for line in lines if line and line.strip()
+    )
     return said
 
 

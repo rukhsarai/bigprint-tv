@@ -129,16 +129,19 @@ vega run-app com.bigprint.tv.main</pre>
   <figcaption>The light look at 2× text: the pinned figures stay put while the letter grows.</figcaption>
 </figure>
 <ol start="4">
-  <li><b>A page that is hard to read.</b> Photograph <code>samples/us-bill-blurry.jpg</code>,
-  a deliberately poor photo of the same bill. The TV puts a <i>Check: some words were hard
-  to read</i> line above the letter and tells you to compare it with the paper, instead of
-  presenting a bad read as a clean one.</li>
+  <li><b>A page that is hard to read.</b> Photograph
+  <code>samples/us-bill-very-blurry.jpg</code>, the same bill blurred until the OCR starts
+  to struggle. Three things happen, and the third is the one to look at: a <i>Check</i> line
+  appears above the letter; only the figures the pipeline is sure of are pinned; and where a
+  money figure fell below the confidence floor, the sentence keeps its shape and the figure
+  is replaced by <b>[hard to read — check the paper]</b>. The reading is not shown at
+  all, because a figure that was not good enough to pin is not good enough to say.</li>
 </ol>
 <figure>
-  <img src="../video/stills/blurry_check_panel_92.png" alt="The blurry page on the TV, with a Check line above the pinned figures">
-  <figcaption>The blurry page. The pinned figures still match the paper — $92.58,
-  October 28, October 12 — while the Check line warns that lines further down, such as the
-  account and phone numbers, came out garbled.</figcaption>
+  <img src="../video/stills/blurry_check_panel_92.png" alt="The blurry page on the TV: the Check line, the pinned figures, and a sentence with its figure replaced">
+  <figcaption>The badly blurred page. The amount due is pinned because both readers agree on
+  it; the total current charges are not stated at all, because that reading was not
+  trustworthy. Press Listen and the voice says the same thing in words.</figcaption>
 </figure>
 <p class="avoid"><b>Next photo and Recent letters.</b> <i>Next photo</i> returns to the
 pairing screen; the phone page is still open, so it is one more tap. Press <i>Back</i> on
@@ -150,8 +153,8 @@ deleted. Back never exits the app by accident.</p>
 <pre>backend/tools/round_trip.sh                     # live backend, end to end, ~15 s
 backend/tools/round_trip.sh samples/us-bill.jpg # the same with the video's bill
 
-npm ci &amp;&amp; npm test                              # app: 157 tests
-python3 -m unittest discover backend/tests      # backend: 37 tests</pre>
+npm ci &amp;&amp; npm test                              # app: 162 tests
+python3 -m unittest discover backend/tests      # backend: 44 tests</pre>
 <p>It opens a pairing session, uploads a photo, waits for the text, asks for the voice,
 and prints the key facts the pipeline extracted with the time each step took. That is the
 whole product minus the screen.</p>

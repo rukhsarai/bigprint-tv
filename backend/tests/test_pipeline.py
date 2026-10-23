@@ -324,3 +324,61 @@ class AmbiguousDateTest(unittest.TestCase):
         from pipeline import values_agree
         self.assertFalse(values_agree("3/12/2016", "3/11/2016", "date"))
         self.assertFalse(values_agree("13/12/2016", "12/13/2017", "date"))
+
+
+class UncertainMoneyTest(unittest.TestCase):
+    """A money figure too unsure to pin must not be stated in a sentence."""
+
+    LINES = [
+        "This is an electric bill from Northbridge Electric.",
+        "The total amount due is 992.58.",
+        "Please pay by October 28, 2026.",
+    ]
+
+    def test_an_unsure_reading_is_masked_where_it_stands(self):
+        from pipeline import UNSURE_MARK, mask_uncertain_money
+        out = mask_uncertain_money(self.LINES, ["992.58"])
+        self.assertEqual(out[1], f"The total amount due is {UNSURE_MARK}.")
+        # The sentence keeps its shape, and nothing else is touched.
+        self.assertEqual(out[0], self.LINES[0])
+        self.assertEqual(out[2], self.LINES[2])
+
+    def test_a_currency_symbol_goes_with_the_figure(self):
+        from pipeline import UNSURE_MARK, mask_uncertain_money
+        out = mask_uncertain_money(["The total amount due is $992.58."], ["992.58"])
+        self.assertEqual(out, [f"The total amount due is {UNSURE_MARK}."])
+        self.assertNotIn("$", out[0])
+
+    def test_the_printed_form_need_not_match_the_spoken_one(self):
+        from pipeline import UNSURE_MARK, mask_uncertain_money
+        out = mask_uncertain_money(["The total amount due is 1,992.58."], ["$1992.58"])
+        self.assertEqual(out, [f"The total amount due is {UNSURE_MARK}."])
+
+    def test_nothing_is_masked_when_every_reading_is_trusted(self):
+        from pipeline import mask_uncertain_money
+        self.assertEqual(mask_uncertain_money(self.LINES, []), self.LINES)
+
+    def test_a_pinned_figure_is_never_masked(self):
+        # The same digits can be read twice, once well and once badly; the
+        # reading that made it to the pinned boxes wins.
+        from pipeline import mask_uncertain_money
+        out = mask_uncertain_money(self.LINES, ["992.58"], pinned=["$992.58"])
+        self.assertEqual(out, self.LINES)
+
+    def test_other_figures_on_the_page_survive(self):
+        from pipeline import UNSURE_MARK, mask_uncertain_money
+        out = mask_uncertain_money(
+            ["The total amount due is 992.58.", "The delivery charge is 24.30."],
+            ["992.58"])
+        self.assertEqual(out[1], "The delivery charge is 24.30.")
+        self.assertIn(UNSURE_MARK, out[0])
+
+    def test_the_voice_says_the_mark_in_words(self):
+        from pipeline import UNSURE_MARK
+        from speech import UNSURE_SPOKEN
+        said = story_text("Electric bill", "Northbridge Electric",
+                          [f"The total amount due is {UNSURE_MARK}."],
+                          low_confidence=True)
+        self.assertNotIn(UNSURE_MARK, " ".join(said))
+        self.assertIn(f"The total amount due is {UNSURE_SPOKEN}.", said)
+        self.assertIn("Some words were hard to read, so check the paper copy.", said)

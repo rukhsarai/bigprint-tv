@@ -27,6 +27,11 @@ import {
 } from '../hooks/useDocumentViewChoice';
 import type {ExactLine, ScannedDocument} from '../data/documents';
 import {toParagraphs} from '../data/paragraphs';
+import {
+  UNSURE_LABEL,
+  spokenLine,
+  unsureParts,
+} from '../data/unsure';
 import type {AudioPlayer} from '../services/audioPlayer';
 import type {DocumentService} from '../services/documentService';
 import {useColours} from '../theme/ColoursProvider';
@@ -453,6 +458,8 @@ const DocumentLine = memo(
     const [focused, setFocused] = useState(false);
     const dp = (px: number) => Math.round(px * unit);
     const prefix = numbered ? `${index + 1}.  ` : kind === 'row' ? '▸ ' : '';
+    // One piece unless the backend took a figure out of this line.
+    const pieces = unsureParts(text);
     return (
       // Pressable only so it can take focus: Up/Down steps through the
       // letter and the screen reader reads each line. Pressing does nothing.
@@ -462,7 +469,7 @@ const DocumentLine = memo(
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
         hasTVPreferredFocus={hasTVPreferredFocus}
-        aria-label={`${prefix}${text}`}
+        aria-label={`${prefix}${spokenLine(text)}`}
         accessibilityDescribedBy={describedBy}
         testID={`line-${index}`}
         style={[
@@ -486,7 +493,21 @@ const DocumentLine = memo(
             textType,
           ]}>
           {prefix}
-          {text}
+          {pieces.map((piece, i) => (
+            <Text key={i}>
+              {piece}
+              {i < pieces.length - 1 && (
+                // The colour of the Check panel's edge and icon, so the badge
+                // and the warning read as one voice, and bold and bracketed so
+                // it cannot be mistaken for part of the sentence. A background
+                // on a nested Text is not painted on Vega, so the colour
+                // carries it; attention on background is in the contrast test.
+                <Text style={[layout.bold, {color: colours.attention}]}>
+                  {` [${UNSURE_LABEL}]`}
+                </Text>
+              )}
+            </Text>
+          ))}
         </Text>
       </Pressable>
     );

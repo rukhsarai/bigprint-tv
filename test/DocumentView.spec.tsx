@@ -14,6 +14,11 @@ import {DocumentView} from '../src/screens/DocumentView';
 import {ColoursProvider} from '../src/theme/ColoursProvider';
 import {sampleReceipt as mockBill} from '../src/data/documents';
 import type {ScannedDocument} from '../src/data/documents';
+import {
+  UNSURE_LABEL,
+  UNSURE_MARK,
+  UNSURE_SPOKEN,
+} from '../src/data/unsure';
 import type {AudioPlayer, PlaybackHandlers} from '../src/services/audioPlayer';
 import type {
   DocumentService,
@@ -183,6 +188,36 @@ describe('DocumentView', () => {
         'Check: some words were hard to read. Compare with the paper copy.',
       ),
     ).toBeTruthy();
+  });
+
+  it('shows a badge, not a figure, where the backend was unsure about money', async () => {
+    // The pipeline leaves the sentence and takes the amount out. Printing it
+    // anyway under the Check panel would state the one thing the app must not
+    // get wrong. See mask_uncertain_money in backend/pipeline.py.
+    show({
+      document: {
+        ...mockBill,
+        lowConfidence: true,
+        lines: [`The total amount due is ${UNSURE_MARK}.`],
+      },
+    });
+    await settled();
+    expect(screen.getByText(` [${UNSURE_LABEL}]`)).toBeTruthy();
+    expect(screen.queryByText(/992|\$/)).toBeNull();
+  });
+
+  it('says the missing figure in words, because a badge cannot be heard', async () => {
+    show({
+      document: {
+        ...mockBill,
+        lowConfidence: true,
+        lines: [`The total amount due is ${UNSURE_MARK}.`],
+      },
+    });
+    await settled();
+    expect(screen.getByTestId('line-0').props.accessibilityLabel).toBe(
+      `The total amount due is ${UNSURE_SPOKEN}.`,
+    );
   });
 
   it('links key facts to the first line so a screen reader hears them', async () => {

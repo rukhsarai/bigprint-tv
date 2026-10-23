@@ -36,7 +36,11 @@ Entered in the **Amazon Developer Hackathon**, Fire TV track (Vega OS).
 - Devpost: https://amazonappdev2026.devpost.com/
 - Fire TV priority categories that fit: **computer vision**, **multi-modal UX**
 - Also eligible for the **AWS Builder** mini challenge (Lambda, S3, Textract,
-  Bedrock Nova Lite + Pro, Polly) and the **Open Source** mini challenge (MIT)
+  Bedrock Nova Lite + Pro, Polly)
+- **Not** the **Open Source** mini challenge: that one wants a new additional
+  open-source project or a contribution to an existing public repository
+  alongside the primary submission, with its own contribution URL. An MIT
+  licence on this repository does not satisfy it (see `SUBMISSION.md` §2)
 
 **Submission requires:** text description, GitHub repo (public with a licence,
 or private with Amazon reviewers added as collaborators), a demo video under
@@ -63,7 +67,7 @@ Judging criteria: Tech Implementation, Design, Potential Impact, Quality of Idea
 | Accessibility | Audited against Amazon's A11Y Compass and fixed; new states have spoken equivalents |
 | Backend | Two Lambdas + S3 behind an API Gateway HTTP API, deployed; see `backend/README.md` |
 | Pipeline | Textract LAYOUT+TABLES (headings kept) → Nova Lite classify → AnalyzeExpense + Nova Pro image cross-check → Nova Pro rewrite with the letter fenced as data → currency guard → whole-figure numeric guard. Polly neural (Joanna, US English), the whole letter as one story, only when someone presses Listen |
-| Tests | App: 157 Jest tests (including WCAG contrast for every colour pair), typecheck clean, 0 lint errors. Backend: 37 unit tests |
+| Tests | App: 162 Jest tests (including WCAG contrast for every colour pair), typecheck clean, 0 lint errors. Backend: 44 unit tests |
 | Round trip | `backend/tools/round_trip.sh` pairs, uploads a synthetic bill, polls, asks for the voice and fetches the audio from any machine. 19 Oct: text in 8–12 s with 5 of 5 key facts right, voice in 3–4 s |
 | Abuse limits | 128-bit session secret, JPEG-only 4 MB uploads, 20 per session, 40 sessions and 80 uploads per address per day, a 200 docs/day cap spent only after a real read, 1-day data expiry |
 

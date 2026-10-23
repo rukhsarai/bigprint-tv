@@ -30,8 +30,8 @@ Verified today, 19 October, from a machine outside AWS with no Fire TV, by
 | Voice ready after pressing Listen (Polly, on request) | 3.6 s | 3 s |
 | Audio served | 340 KB MP3 | 276 KB MP3 |
 
-App: 157 Jest tests, typecheck clean, 0 lint errors. Backend: 37 unit tests.
-Licence: MIT. Friction log: 11 entries.
+App: 162 Jest tests, typecheck clean, 0 lint errors. Backend: 44 unit tests.
+Licence: MIT. Friction log: 12 entries.
 
 ---
 
@@ -82,12 +82,26 @@ design decisions that are *not* obvious are the ones to point at: reading
 first and voice on request, numbers come from OCR and never from the model,
 a letter is data not instructions (scam post targets exactly this audience).
 
-**Bonuses.** Friction log: 11 entries in `FRICTION_LOG.md`, each with
+**Bonuses.** Friction log: 12 entries in `FRICTION_LOG.md`, each with
 task, steps, expected, actual, severity, workaround and a suggestion. Two
 are high severity and were real blockers (path with spaces; public Function
-URL 403). Mini challenges: **AWS Builder** (Lambda, API Gateway, S3,
-Textract, Bedrock Nova Lite and Pro, Polly) and **Open Source** (MIT).
-Priority categories to tick: **computer vision** and **multi-modal UX**.
+URL 403). Mini challenge: **AWS Builder** (Lambda, API Gateway, S3,
+Textract, Bedrock Nova Lite and Pro, Polly). Priority categories to tick:
+**computer vision** and **multi-modal UX**.
+
+**Not the Open Source mini challenge, on the rules as written.** That prize
+asks for "a new, additional open-source project or contribute to an existing
+public repository during the hackathon window, *alongside* a primary track
+submission", and the form wants a separate contribution URL. This repository
+being MIT is the primary submission, not an additional contribution, so
+claiming it would be claiming something the rule does not grant. To enter the
+mini challenge properly, publish one of the pieces this build already needed
+as its own MIT repository, or open a pull request against a library the
+friction log found wanting, and put that URL on the form.
+
+**Newly created in the submission period.** First commit 15 October 2026;
+the submission period opened 31 August 2026. Nothing here predates it, so the
+"significantly updated" explanation the rules ask for does not apply.
 
 ---
 
@@ -199,7 +213,7 @@ in the browser.
 
 **Challenges we ran into**
 
-The honest list is long, and eleven entries of it are written up in our
+The honest list is long, and twelve entries of it are written up in our
 friction log. The ones that shaped the product: our first OCR pass turned
 a receipt's table into "the amount for diesel is 8", right digits, wrong
 row, which is where the layout-aware OCR and the numeric guard were born.
@@ -227,7 +241,7 @@ linked to the first focusable line or a blind user would never hear the
 amount due, which is the entire point of the app. Scam post targets
 exactly this audience, so a letter is treated as data, never as
 instructions, and the public endpoint cannot call any AI service at all.
-157 app tests and 37 backend tests.
+162 app tests and 44 backend tests.
 
 **What we learned**
 
@@ -349,6 +363,28 @@ long versions with reproduction steps are the numbered entries in
   that does not exist, which reads exactly like a policy mistake (#8).
 - **IAM.** Inline policies on a user share a 2,048-byte limit; put role
   policies on the roles.
+
+**The two questions the form asks that the list above does not answer.**
+
+*Onboarding, zero to hello world.* Vega: about an hour, and most of it was
+the two blockers — a project path containing a space broke the build with an
+error naming a directory we never typed (#1), and accessibility props turned
+out to be Kepler-only imports that neither the docs nor the template mention
+(#2). Once past those, generate → build → install → run on the virtual device
+was quick and stayed quick. AWS: Lambda, S3 and Textract were same-afternoon;
+Bedrock was not, because a new account sat behind a verification step that
+presented as a quota error with every quota reading zero, with nothing saying
+to wait.
+
+*Would you build with these devices and services again? **Yes.*** React
+Native on Vega is a genuinely fast way to reach a television — a 2.5 MB
+release build cold-launches in under a second — and the accessibility
+guidance was right where it mattered, including the one rule that changed
+the design (the screen reader follows input focus). On the AWS side,
+layout-aware Textract plus Nova plus on-request Polly is the whole product
+for about three cents a letter, which is what makes a free or charity-funded
+service plausible. The caveats are documentation, not capability, and all
+twelve are written up in `FRICTION_LOG.md`.
 
 ---
 

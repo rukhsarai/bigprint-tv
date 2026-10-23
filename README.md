@@ -89,7 +89,9 @@ against the live backend, which stays up through the judging window
    bills used in the demo video and the round-trip test are in
    [samples/](samples/): `us-bill.jpg` (the electricity bill in the video),
    `us-bill-blurry.jpg` (the same bill, deliberately poor, which makes the TV
-   say "Check: some words were hard to read" instead of guessing), and
+   say "Check: some words were hard to read" instead of guessing),
+   `us-bill-very-blurry.jpg` (blurred far enough that the TV refuses to state
+   one of the figures at all, and says so in the sentence), and
    `uk-water-bill.jpg` (the water bill `round_trip.sh` sends, in pounds).
    Open one on a laptop screen and photograph that, or print it.
    A step-by-step guide with screenshots is in
@@ -101,8 +103,8 @@ against the live backend, which stays up through the judging window
 
 ```bash
 backend/tools/round_trip.sh              # live backend, end to end, ~15 s
-npm ci && npm test                       # app: 157 tests
-python3 -m unittest discover backend/tests   # backend: 37 tests
+npm ci && npm test                       # app: 162 tests
+python3 -m unittest discover backend/tests   # backend: 44 tests
 ```
 
 `round_trip.sh` opens a pairing session, uploads a sample photo, waits for
@@ -111,7 +113,12 @@ product minus the screen.
 
 **What to look for.** Every number on the screen came from OCR, never from a
 language model; a second reader can veto a figure, nothing can add one, and
-any sentence with a number that is not on the page is dropped. The first-run
+any sentence with a number that is not on the page is dropped. A figure that
+was not good enough to pin at the top is not good enough to say either: when
+a money reading falls below the confidence floor or the second reader vetoes
+it, the sentence keeps its shape and the figure is replaced by *[hard to read
+— check the paper]*, on screen and in the voice. Photograph
+`us-bill-very-blurry.jpg` to see it. The first-run
 screen lets you pick a look by reading a real sentence, not by name. Back on
 the remote never exits by accident.
 
@@ -120,6 +127,10 @@ read, and the photo, text and audio are deleted automatically after one day.
 It is still a hackathon deployment, so use the samples, or a letter you do
 not mind a demo server seeing for a day. There is a cap of 200 pages a day
 across everyone; if the TV says the service is busy, that is why.
+
+**Newly created for this hackathon.** First commit 15 October 2026, inside the
+submission period that opened on 31 August. Nothing in this repository predates
+it, and the history is public if you want to check.
 
 **Known limits** are listed plainly in the release notes and in
 [CONTEXT.md](CONTEXT.md): no run yet on a physical Fire TV with VoiceView,
@@ -136,8 +147,8 @@ vega run-app $(find build -name '*_x86_64.vpkg' -path '*Debug*' | head -1) com.b
 ```
 
 ```bash
-npm test                                   # app: 157 tests
-python -m unittest discover backend/tests  # backend: 37 tests
+npm test                                   # app: 162 tests
+python -m unittest discover backend/tests  # backend: 44 tests
 npm run lint
 npx tsc --noEmit
 backend/tools/round_trip.sh                # the live backend, end to end, in ~15 s
